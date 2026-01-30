@@ -10,11 +10,10 @@ import { createClient } from '@supabase/supabase-js';
 // 地端 Supabase 預設值（supabase start 後取得）
 const supabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-
-if (!supabaseAnonKey) {
-  console.warn('NEXT_PUBLIC_SUPABASE_ANON_KEY 未設定，請檢查 .env.local');
-}
+// Supabase CLI 本地開發預設 anon key（非敏感資料）
+const supabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   realtime: {
