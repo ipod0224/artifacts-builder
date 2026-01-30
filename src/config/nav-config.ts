@@ -42,6 +42,14 @@ export const navItems: NavItem[] = [
     items: []
   },
   {
+    title: 'RAG 知識庫',
+    url: '/dashboard/rag',
+    icon: 'search',
+    isActive: false,
+    shortcut: ['r', 'r'],
+    items: []
+  },
+  {
     title: 'Workspaces',
     url: '/dashboard/workspaces',
     icon: 'workspace',
