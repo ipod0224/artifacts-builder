@@ -23,17 +23,37 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   }
 });
 
-// 類型定義（與 ai-workflow 後端一致）
+// 類型定義（統一使用 documents 表）
+export interface DocumentMetadata {
+  source: string;
+  category:
+    | 'regulations'
+    | 'technical'
+    | 'knowledge'
+    | 'business'
+    | 'communication'
+    | 'data'
+    | 'general';
+  content_type: string;
+  doc_type: string;
+  file_hash?: string;
+  chunk_index: number;
+  total_chunks: number;
+  is_last_chunk?: boolean;
+  job_id?: string;
+  embedding_model?: string;
+}
+
 export interface Document {
   id: string;
   content: string;
-  source: string;
-  chunk_idx: number;
   embedding?: number[];
-  metadata?: Record<string, unknown>;
+  metadata?: DocumentMetadata;
   created_at: string;
 }
 
+// 保留 Regulation 類型以維持向後相容（deprecated）
+/** @deprecated 請使用 Document 並透過 metadata.category === 'regulations' 過濾 */
 export interface Regulation {
   id: string;
   content: string;

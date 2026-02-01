@@ -53,10 +53,10 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('regulations')
+      .from('documents')
       .update(updateData)
       .eq('id', id)
-      .select('id, source, content, doc_type')
+      .select('id, content, metadata')
       .single();
 
     if (error) {

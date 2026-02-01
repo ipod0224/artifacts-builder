@@ -9,8 +9,9 @@ import { useRagStore } from '@/stores/rag-store';
 
 /**
  * 使用 RAG 資料並自動訂閱 Realtime
+ * @param category 可選的分類過濾（regulations/technical/knowledge/business/communication/data/general）
  */
-export function useRag() {
+export function useRag(category?: string) {
   const store = useRagStore();
 
   // 自動訂閱 Realtime
@@ -18,18 +19,16 @@ export function useRag() {
     const unsubscribe = store.subscribe();
 
     // 初始載入資料
-    store.fetchDocuments();
-    store.fetchRegulations();
+    store.fetchDocuments(category);
 
     return () => {
       unsubscribe();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [category]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     // 狀態
     documents: store.documents,
-    regulations: store.regulations,
     searchResults: store.searchResults,
     isLoading: store.isLoading,
     isSubscribed: store.isSubscribed,
@@ -38,10 +37,7 @@ export function useRag() {
 
     // Actions
     search: store.searchDocuments,
-    refresh: () => {
-      store.fetchDocuments();
-      store.fetchRegulations();
-    },
+    refresh: (cat?: string) => store.fetchDocuments(cat || category),
     reset: store.reset
   };
 }

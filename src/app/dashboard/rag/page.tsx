@@ -48,9 +48,9 @@ interface SearchResult {
   content: string;
   source: string;
   similarity: number;
-  article_no?: string;
   chunk_idx?: number;
   doc_type?: string;
+  category?: string;
 }
 
 interface Material {
@@ -67,7 +67,7 @@ export default function RAGPage() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [answer, setAnswer] = useState('');
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [stats, setStats] = useState({ regulations: 0, materials: 0 });
+  const [stats, setStats] = useState({ documents: 0, materials: 0 });
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -84,18 +84,18 @@ export default function RAGPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [regResult, matResult] = await Promise.all([
+        const [docResult, matResult] = await Promise.all([
           supabase
-            .from('regulations')
+            .from('documents')
             .select('id', { count: 'exact', head: true }),
           supabase.from('materials').select('*').limit(10)
         ]);
 
-        if (regResult.error) throw regResult.error;
+        if (docResult.error) throw docResult.error;
         if (matResult.error) throw matResult.error;
 
         setStats({
-          regulations: regResult.count || 0,
+          documents: docResult.count || 0,
           materials: matResult.data?.length || 0
         });
         setMaterials(matResult.data || []);
@@ -140,11 +140,11 @@ export default function RAGPage() {
           (item: any) => ({
             id: item.id,
             content: item.content,
-            source: item.source || '法規資料庫',
+            source: item.source || '知識庫',
             similarity: item.similarity || 0,
-            article_no: item.article_no,
             chunk_idx: item.chunk_idx,
-            doc_type: item.doc_type
+            doc_type: item.doc_type,
+            category: item.category
           })
         );
 
@@ -152,7 +152,7 @@ export default function RAGPage() {
 
         const topResult = formattedResults[0];
         setAnswer(
-          `根據搜尋結果，${topResult.content}\n\n（來源：${topResult.source}${topResult.article_no ? ` ${topResult.article_no}` : ''}，相似度 ${(topResult.similarity * 100).toFixed(0)}%）`
+          `根據搜尋結果，${topResult.content}\n\n（來源：${topResult.source}${topResult.doc_type ? ` - ${topResult.doc_type}` : ''}，相似度 ${(topResult.similarity * 100).toFixed(0)}%）`
         );
       } else {
         setAnswer('未找到相關結果，請嘗試其他關鍵字。');
@@ -216,7 +216,7 @@ export default function RAGPage() {
       // 如果是第一筆結果，也更新 answer
       if (results[0]?.id === editingItem.id) {
         setAnswer(
-          `根據搜尋結果，${editContent}\n\n（來源：${editingItem.source}${editingItem.article_no ? ` ${editingItem.article_no}` : ''}，相似度 ${(editingItem.similarity * 100).toFixed(0)}%）`
+          `根據搜尋結果，${editContent}\n\n（來源：${editingItem.source}${editingItem.doc_type ? ` - ${editingItem.doc_type}` : ''}，相似度 ${(editingItem.similarity * 100).toFixed(0)}%）`
         );
       }
 
@@ -247,7 +247,7 @@ export default function RAGPage() {
             <h2 className='text-2xl font-bold tracking-tight'>
               RAG 知識庫搜尋
             </h2>
-            <p className='text-muted-foreground'>搜尋電氣法規與材料資料</p>
+            <p className='text-muted-foreground'>搜尋知識庫與材料資料</p>
           </div>
           <Badge
             variant={isConnected ? 'outline' : 'destructive'}
@@ -272,8 +272,8 @@ export default function RAGPage() {
         <div className='grid grid-cols-1 gap-4 md:grid-cols-4'>
           <Card>
             <CardHeader className='pb-2'>
-              <CardDescription>法規 Chunks</CardDescription>
-              <CardTitle className='text-2xl'>{stats.regulations}</CardTitle>
+              <CardDescription>知識庫 Chunks</CardDescription>
+              <CardTitle className='text-2xl'>{stats.documents}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
@@ -304,7 +304,7 @@ export default function RAGPage() {
               語意搜尋
             </CardTitle>
             <CardDescription>
-              輸入問題，系統將從法規與材料庫中搜尋相關內容
+              輸入問題，系統將從知識庫中搜尋相關內容
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -452,7 +452,7 @@ export default function RAGPage() {
           <DialogHeader>
             <DialogTitle className='flex items-center gap-2'>
               <IconPencil className='size-5' />
-              編輯法規內容
+              編輯知識庫內容
             </DialogTitle>
             <DialogDescription>
               修改後會自動重新生成 embedding 向量以確保搜尋準確性
@@ -472,7 +472,7 @@ export default function RAGPage() {
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
                 className='min-h-[300px] font-mono text-sm'
-                placeholder='輸入法規內容...'
+                placeholder='輸入內容...'
               />
 
               {saveMessage && (

@@ -6,13 +6,12 @@
  */
 
 import { create } from 'zustand';
-import { supabase, Document, Regulation } from '@/lib/supabase';
+import { supabase, Document } from '@/lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 interface RagState {
   // 狀態
   documents: Document[];
-  regulations: Regulation[];
   isLoading: boolean;
   isSubscribed: boolean;
   error: string | null;
@@ -22,8 +21,7 @@ interface RagState {
   lastQuery: string | null;
 
   // Actions
-  fetchDocuments: () => Promise<void>;
-  fetchRegulations: () => Promise<void>;
+  fetchDocuments: (category?: string) => Promise<void>;
   searchDocuments: (query: string, limit?: number) => Promise<void>;
   subscribe: () => () => void;
   reset: () => void;
@@ -31,47 +29,35 @@ interface RagState {
 
 // 保存 channel 引用，避免重複訂閱
 let documentChannel: RealtimeChannel | null = null;
-let regulationChannel: RealtimeChannel | null = null;
 
 export const useRagStore = create<RagState>((set, get) => ({
   // 初始狀態
   documents: [],
-  regulations: [],
   isLoading: false,
   isSubscribed: false,
   error: null,
   searchResults: [],
   lastQuery: null,
 
-  // 載入文件
-  fetchDocuments: async () => {
+  // 載入文件（可選 category 過濾）
+  fetchDocuments: async (category?: string) => {
     set({ isLoading: true, error: null });
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('documents')
-        .select('id, content, source, chunk_idx, metadata, created_at')
+        .select('id, content, metadata, created_at')
         .order('created_at', { ascending: false })
         .limit(100);
+
+      // 如果有指定 category，用 metadata 過濾
+      if (category) {
+        query = query.filter('metadata->>category', 'eq', category);
+      }
+
+      const { data, error } = await query;
 
       if (error) throw error;
       set({ documents: data || [], isLoading: false });
-    } catch (err) {
-      set({ error: (err as Error).message, isLoading: false });
-    }
-  },
-
-  // 載入法規
-  fetchRegulations: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      const { data, error } = await supabase
-        .from('regulations')
-        .select('id, content, source, article_no, chunk_idx, created_at')
-        .order('created_at', { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-      set({ regulations: data || [], isLoading: false });
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
     }
@@ -85,13 +71,13 @@ export const useRagStore = create<RagState>((set, get) => ({
       const response = await fetch('/api/rag/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, limit })
+        body: JSON.stringify({ query, match_count: limit })
       });
 
       if (!response.ok) throw new Error('搜尋失敗');
 
-      const { results } = await response.json();
-      set({ searchResults: results, isLoading: false });
+      const { data } = await response.json();
+      set({ searchResults: data || [], isLoading: false });
     } catch (err) {
       set({ error: (err as Error).message, isLoading: false });
     }
@@ -140,49 +126,12 @@ export const useRagStore = create<RagState>((set, get) => ({
       )
       .subscribe();
 
-    // 訂閱 regulations 表
-    regulationChannel = supabase
-      .channel('regulations-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'regulations' },
-        (payload) => {
-          set((state) => {
-            switch (payload.eventType) {
-              case 'INSERT':
-                return {
-                  regulations: [payload.new as Regulation, ...state.regulations]
-                };
-              case 'UPDATE':
-                return {
-                  regulations: state.regulations.map((reg) =>
-                    reg.id === (payload.new as Regulation).id
-                      ? (payload.new as Regulation)
-                      : reg
-                  )
-                };
-              case 'DELETE':
-                return {
-                  regulations: state.regulations.filter(
-                    (reg) => reg.id !== (payload.old as Regulation).id
-                  )
-                };
-              default:
-                return state;
-            }
-          });
-        }
-      )
-      .subscribe();
-
     set({ isSubscribed: true });
 
     // 返回 cleanup 函數
     return () => {
       documentChannel?.unsubscribe();
-      regulationChannel?.unsubscribe();
       documentChannel = null;
-      regulationChannel = null;
       set({ isSubscribed: false });
     };
   },
@@ -191,7 +140,6 @@ export const useRagStore = create<RagState>((set, get) => ({
   reset: () => {
     set({
       documents: [],
-      regulations: [],
       searchResults: [],
       isLoading: false,
       error: null,
