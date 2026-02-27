@@ -41,8 +41,6 @@ import {
   IconCheck,
   IconX
 } from '@tabler/icons-react';
-import { supabase } from '@/lib/supabase';
-
 interface SearchResult {
   id: string;
   content: string;
@@ -84,25 +82,19 @@ export default function RAGPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const [docResult, matResult] = await Promise.all([
-          supabase
-            .from('documents')
-            .select('id', { count: 'exact', head: true }),
-          supabase.from('materials').select('*').limit(10)
-        ]);
+        const response = await fetch('/api/rag/stats');
+        if (!response.ok) throw new Error('無法取得統計資料');
 
-        if (docResult.error) throw docResult.error;
-        if (matResult.error) throw matResult.error;
-
+        const result = await response.json();
         setStats({
-          documents: docResult.count || 0,
-          materials: matResult.data?.length || 0
+          documents: result.stats.documents || 0,
+          materials: result.stats.materials || 0
         });
-        setMaterials(matResult.data || []);
+        setMaterials(result.materials || []);
         setIsConnected(true);
         setError(null);
       } catch (err) {
-        setError('無法連接 Supabase，請確認服務已啟動');
+        setError('無法連接資料庫，請確認 PostgreSQL 服務已啟動');
         setIsConnected(false);
       }
     }
@@ -254,7 +246,7 @@ export default function RAGPage() {
             className='gap-1'
           >
             <IconDatabase className='size-3' />
-            {isConnected ? 'Supabase 已連線' : 'Supabase 未連線'}
+            {isConnected ? 'PostgreSQL 已連線' : 'PostgreSQL 未連線'}
           </Badge>
         </div>
 
@@ -411,7 +403,7 @@ export default function RAGPage() {
           <Card>
             <CardHeader>
               <CardTitle>材料資料</CardTitle>
-              <CardDescription>來自 Supabase 的真實資料</CardDescription>
+              <CardDescription>來自 PostgreSQL 的真實資料</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>

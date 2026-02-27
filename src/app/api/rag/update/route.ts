@@ -1,14 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321';
-// Supabase CLI 本地開發預設 anon key（非敏感資料）
-const supabaseKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
-
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { sql } from '@/lib/db';
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const MODEL_NAME = 'bge-m3';
@@ -37,33 +28,48 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { id, content, regenerate_embedding = true } = body;
 
-    if (!id || !content) {
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!id || !UUID_RE.test(id)) {
       return NextResponse.json(
-        { error: '缺少必要參數 (id, content)' },
+        { error: 'id 必須是有效的 UUID' },
+        { status: 400 }
+      );
+    }
+    if (!content || typeof content !== 'string' || content.length > 100_000) {
+      return NextResponse.json(
+        { error: 'content 必須為 1~100000 字元的字串' },
         { status: 400 }
       );
     }
 
-    const updateData: Record<string, unknown> = { content };
+    let data;
 
-    // 重新生成 embedding（因為內容改變了）
     if (regenerate_embedding) {
       const embedding = await generateEmbedding(content);
-      updateData.embedding = `[${embedding.join(',')}]`;
+      const embeddingStr = '[' + embedding.join(',') + ']';
+
+      const rows = await sql`
+        UPDATE documents
+        SET content = ${content}, embedding = ${embeddingStr}::vector
+        WHERE id = ${id}
+        RETURNING id, content, metadata
+      `;
+      data = rows[0];
+    } else {
+      const rows = await sql`
+        UPDATE documents
+        SET content = ${content}
+        WHERE id = ${id}
+        RETURNING id, content, metadata
+      `;
+      data = rows[0];
     }
 
-    const { data, error } = await supabase
-      .from('documents')
-      .update(updateData)
-      .eq('id', id)
-      .select('id, content, metadata')
-      .single();
-
-    if (error) {
-      console.error('更新失敗:', error);
+    if (!data) {
       return NextResponse.json(
-        { error: `更新失敗: ${error.message}` },
-        { status: 500 }
+        { error: `找不到 id=${id} 的文件` },
+        { status: 404 }
       );
     }
 
