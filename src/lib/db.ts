@@ -7,15 +7,32 @@
 
 import postgres from 'postgres';
 
-const DATABASE_URL = process.env.DATABASE_URL;
-if (!DATABASE_URL) {
-  throw new Error('DATABASE_URL environment variable is required');
+type Sql = ReturnType<typeof postgres>;
+
+let _sql: Sql | null = null;
+
+function getSQL(): Sql {
+  if (_sql) return _sql;
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error('DATABASE_URL environment variable is required');
+  }
+  _sql = postgres(url, { max: 10, idle_timeout: 20, connect_timeout: 10 });
+  return _sql;
 }
 
-export const sql = postgres(DATABASE_URL, {
-  max: 10,
-  idle_timeout: 20,
-  connect_timeout: 10
+/**
+ * Lazy-initialised Postgres tagged-template client.
+ * Defers the DATABASE_URL check to first invocation (runtime),
+ * so Vercel builds succeed without the env var.
+ */
+export const sql: Sql = new Proxy((() => {}) as unknown as Sql, {
+  apply(_target, _thisArg, args: unknown[]) {
+    return (getSQL() as unknown as (...a: unknown[]) => unknown)(...args);
+  },
+  get(_target, prop) {
+    return Reflect.get(getSQL(), prop);
+  }
 });
 
 // 類型定義
