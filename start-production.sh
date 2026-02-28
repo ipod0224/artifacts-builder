@@ -12,11 +12,12 @@ fi
 
 cd /Users/yen/artifacts-builder
 
-# Load production env
+# Load production env (no set -a, only export needed vars)
 if [ -f .env.production ]; then
-  set -a
-  source .env.production
-  set +a
+  while IFS='=' read -r key value; do
+    [[ -z "$key" || "$key" =~ ^# ]] && continue
+    export "$key=$value"
+  done < .env.production
 fi
 
 export PORT=4103
@@ -27,4 +28,4 @@ if [ ! -d .next ]; then
   /opt/homebrew/bin/pnpm build
 fi
 
-exec /opt/homebrew/bin/pnpm start -p 4103
+exec /opt/homebrew/bin/pnpm start -p "$PORT"

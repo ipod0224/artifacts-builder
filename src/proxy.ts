@@ -44,12 +44,29 @@ const PROXY_API_PATHS = [
   '/api/rag/documents'
 ];
 
+// Write endpoints that should only work locally
+const WRITE_ROUTES = ['/api/rag/update'];
+
 function shouldProxy(pathname: string): boolean {
-  return PROXY_API_PATHS.some((p) => pathname.startsWith(p));
+  return PROXY_API_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(p + '/')
+  );
+}
+
+function isWriteRoute(pathname: string): boolean {
+  return WRITE_ROUTES.some((p) => pathname.startsWith(p));
 }
 
 export default async function middleware(req: NextRequest) {
   const apiProxyUrl = process.env.API_PROXY_URL;
+
+  // Block write routes on Vercel (only available locally)
+  if (process.env.VERCEL && isWriteRoute(req.nextUrl.pathname)) {
+    return NextResponse.json(
+      { error: 'This endpoint is not available in production' },
+      { status: 403 }
+    );
+  }
 
   // Runtime API proxy: rewrite /api/* to Cloudflare Tunnel backend
   if (apiProxyUrl && isApiRoute(req) && shouldProxy(req.nextUrl.pathname)) {
