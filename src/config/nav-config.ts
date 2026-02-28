@@ -50,6 +50,14 @@ export const navItems: NavItem[] = [
     items: []
   },
   {
+    title: '價格情報',
+    url: '/dashboard/prices',
+    icon: 'priceIntel',
+    isActive: false,
+    shortcut: ['p', 'r'],
+    items: []
+  },
+  {
     title: 'Workspaces',
     url: '/dashboard/workspaces',
     icon: 'workspace',

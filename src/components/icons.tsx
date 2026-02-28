@@ -38,7 +38,8 @@ import {
   IconBox,
   IconPalette,
   IconSearch,
-  IconDatabase
+  IconDatabase,
+  IconChartLine
 } from '@tabler/icons-react';
 
 export type Icon = React.ComponentType<IconProps>;
@@ -83,5 +84,6 @@ export const Icons = {
   account: IconUserCircle,
   profile: IconUser,
   search: IconSearch,
-  database: IconDatabase
+  database: IconDatabase,
+  priceIntel: IconChartLine
 };
