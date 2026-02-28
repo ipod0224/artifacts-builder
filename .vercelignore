@@ -1,2 +1,5 @@
 # Exclude cleanup/reference files from Vercel build
 __CLEANUP__
+.env.production
+.env.local
+start-production.sh
