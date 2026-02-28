@@ -36,7 +36,30 @@ async function getClerkHandler() {
   return clerkHandler;
 }
 
+// Proxyable API paths (exclude /api/rag/update for security)
+const PROXY_API_PATHS = [
+  '/api/prices/',
+  '/api/rag/search',
+  '/api/rag/stats',
+  '/api/rag/documents'
+];
+
+function shouldProxy(pathname: string): boolean {
+  return PROXY_API_PATHS.some((p) => pathname.startsWith(p));
+}
+
 export default async function middleware(req: NextRequest) {
+  const apiProxyUrl = process.env.API_PROXY_URL;
+
+  // Runtime API proxy: rewrite /api/* to Cloudflare Tunnel backend
+  if (apiProxyUrl && isApiRoute(req) && shouldProxy(req.nextUrl.pathname)) {
+    const target = new URL(
+      req.nextUrl.pathname + req.nextUrl.search,
+      apiProxyUrl
+    );
+    return NextResponse.rewrite(target);
+  }
+
   // API routes and local-only pages skip Clerk entirely
   if (isApiRoute(req) || isLocalOnlyRoute(req)) {
     return NextResponse.next();
