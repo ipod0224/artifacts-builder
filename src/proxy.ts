@@ -1,29 +1,55 @@
-import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
 
-// RAG 相關路由完全跳過 Clerk（不連外網）
-const isLocalOnlyRoute = createRouteMatcher([
-  '/dashboard/rag(.*)',
-  '/api/rag(.*)'
-]);
+// API + RAG + Prices 路由不需要 Clerk 認證
+const isApiRoute = (req: NextRequest) =>
+  req.nextUrl.pathname.startsWith('/api/');
 
-// 公開路由
-const isPublicRoute = createRouteMatcher(['/', '/auth(.*)']);
+const isLocalOnlyRoute = (req: NextRequest) =>
+  req.nextUrl.pathname.startsWith('/dashboard/rag') ||
+  req.nextUrl.pathname.startsWith('/dashboard/prices');
 
-const isProtectedRoute = createRouteMatcher(['/dashboard(.*)']);
+const hasClerkKeys = Boolean(
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY
+);
 
-export default clerkMiddleware(async (auth, req: NextRequest) => {
-  // RAG 路由完全跳過，不經過 Clerk
-  if (isLocalOnlyRoute(req)) {
+// Dynamically import Clerk only when keys are available
+let clerkHandler: ((req: NextRequest) => Promise<NextResponse>) | null = null;
+
+async function getClerkHandler() {
+  if (clerkHandler) return clerkHandler;
+  if (!hasClerkKeys) return null;
+
+  const { clerkMiddleware, createRouteMatcher } = await import(
+    '@clerk/nextjs/server'
+  );
+  const isPublicRoute = createRouteMatcher(['/', '/auth(.*)']);
+  const isProtectedRoute = createRouteMatcher(['/dashboard(.*)']);
+
+  const handler = clerkMiddleware(async (auth, req: NextRequest) => {
+    if (isPublicRoute(req)) return;
+    if (isProtectedRoute(req)) await auth.protect();
+  });
+
+  clerkHandler = handler as unknown as (
+    req: NextRequest
+  ) => Promise<NextResponse>;
+  return clerkHandler;
+}
+
+export default async function middleware(req: NextRequest) {
+  // API routes and local-only pages skip Clerk entirely
+  if (isApiRoute(req) || isLocalOnlyRoute(req)) {
     return NextResponse.next();
   }
 
-  // 公開路由不需要認證
-  if (isPublicRoute(req)) return;
+  // Only use Clerk when keys are configured
+  const handler = await getClerkHandler();
+  if (handler) {
+    return handler(req);
+  }
 
-  // 其他 dashboard 路由需要認證
-  if (isProtectedRoute(req)) await auth.protect();
-});
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [

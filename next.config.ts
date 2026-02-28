@@ -22,7 +22,34 @@ const baseConfig: NextConfig = {
       }
     ]
   },
-  transpilePackages: ['geist']
+  transpilePackages: ['geist'],
+
+  // Vercel → Cloudflare Tunnel API proxy
+  // In production (Vercel), API_PROXY_URL routes /api/* to the Mac mini backend.
+  // In development, API_PROXY_URL is unset → no rewrites → local API routes handle requests.
+  async rewrites() {
+    const target = process.env.API_PROXY_URL;
+    if (!target) return [];
+
+    return [
+      {
+        source: '/api/prices/:path*',
+        destination: `${target}/api/prices/:path*`
+      },
+      {
+        source: '/api/rag/search',
+        destination: `${target}/api/rag/search`
+      },
+      {
+        source: '/api/rag/stats',
+        destination: `${target}/api/rag/stats`
+      },
+      {
+        source: '/api/rag/documents',
+        destination: `${target}/api/rag/documents`
+      }
+    ];
+  }
 };
 
 let configWithPlugins = baseConfig;
