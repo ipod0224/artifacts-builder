@@ -48,8 +48,7 @@ export async function GET() {
         recentUpdates
       }
     });
-  } catch (error) {
-    console.error('Price summary error:', error);
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to fetch price summary' },
       { status: 500 }

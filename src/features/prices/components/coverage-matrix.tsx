@@ -22,23 +22,7 @@ interface SourceStat {
   categories: string[];
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  cable: '電纜',
-  nfb: 'NFB',
-  leakagebreaker: '漏電斷路器',
-  contactor: '接觸器',
-  transformer: '變壓器',
-  'emt-conduit': 'EMT 導管',
-  'emt-fitting': 'EMT 另件',
-  'pvc-pipe': 'PVC 管',
-  'pvc-fitting': 'PVC 另件',
-  'rsg-conduit': 'RSG 導管',
-  stainlesspipe: '不鏽鋼管',
-  stainlessfitting: '不鏽鋼另件',
-  acb: 'ACB',
-  'motor-starter': '電磁開關',
-  'thermal-relay': '熱動電驛'
-};
+import { CATEGORY_SHORT_LABELS } from '@/features/prices/constants';
 
 export function CoverageMatrix({
   categories,
@@ -73,7 +57,9 @@ export function CoverageMatrix({
                     className='text-muted-foreground px-1.5 py-1.5 text-center font-medium'
                   >
                     <span className='block max-w-[4rem] truncate'>
-                      {CATEGORY_LABELS[cat] || cat}
+                      {CATEGORY_SHORT_LABELS[
+                        cat as keyof typeof CATEGORY_SHORT_LABELS
+                      ] || cat}
                     </span>
                   </th>
                 ))}

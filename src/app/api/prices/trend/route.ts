@@ -1,17 +1,20 @@
 import { sql } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { categorySchema } from '@/features/prices/constants';
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = request.nextUrl;
-    const category = searchParams.get('category');
+    const parsed = categorySchema.safeParse(searchParams.get('category'));
 
-    if (!category) {
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, error: 'category parameter is required' },
+        { success: false, error: 'Invalid or missing category' },
         { status: 400 }
       );
     }
+
+    const category = parsed.data;
 
     // Price-spec curve: price vs spec value (e.g., cable price by mm²)
     // This shows price reasonability — should follow predictable patterns
@@ -74,8 +77,7 @@ export async function GET(request: NextRequest) {
         coverage
       }
     });
-  } catch (error) {
-    console.error('Price trend error:', error);
+  } catch {
     return NextResponse.json(
       { success: false, error: 'Failed to fetch price trends' },
       { status: 500 }

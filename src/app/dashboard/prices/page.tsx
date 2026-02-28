@@ -7,6 +7,7 @@ import { PriceSpecChart } from '@/features/prices/components/price-spec-chart';
 import { CoverageMatrix } from '@/features/prices/components/coverage-matrix';
 import { CategorySelect } from '@/features/prices/components/category-select';
 import { Separator } from '@/components/ui/separator';
+import { ALLOWED_CATEGORIES } from '@/features/prices/constants';
 
 interface SummaryResponse {
   success: boolean;
@@ -90,29 +91,38 @@ export default function PricesPage() {
   const [summary, setSummary] = useState<SummaryResponse['data'] | null>(null);
   const [compare, setCompare] = useState<CompareResponse['data'] | null>(null);
   const [trend, setTrend] = useState<TrendResponse['data'] | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState('nfb');
+  const [selectedCategory, setSelectedCategory] = useState<string>(
+    ALLOWED_CATEGORIES[1]
+  );
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/prices/summary')
       .then((r) => r.json())
       .then((r: SummaryResponse) => {
         if (r.success) setSummary(r.data);
+        else setError('無法載入價格摘要');
       })
-      .catch(() => {})
+      .catch(() => setError('無法連線到價格 API'))
       .finally(() => setLoading(false));
   }, []);
 
   const fetchCategoryData = useCallback((category: string) => {
+    setError(null);
     Promise.all([
-      fetch(`/api/prices/compare?category=${category}`).then((r) => r.json()),
-      fetch(`/api/prices/trend?category=${category}`).then((r) => r.json())
+      fetch(
+        `/api/prices/compare?category=${encodeURIComponent(category)}`
+      ).then((r) => r.json()),
+      fetch(`/api/prices/trend?category=${encodeURIComponent(category)}`).then(
+        (r) => r.json()
+      )
     ])
       .then(([cmp, trd]: [CompareResponse, TrendResponse]) => {
         if (cmp.success) setCompare(cmp.data);
         if (trd.success) setTrend(trd.data);
       })
-      .catch(() => {});
+      .catch(() => setError('載入品類資料失敗'));
   }, []);
 
   useEffect(() => {
@@ -140,6 +150,13 @@ export default function PricesPage() {
           跨源價格趨勢合理性 & 一致性分析
         </p>
       </div>
+
+      {/* Error Banner */}
+      {error && (
+        <div className='rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-400'>
+          {error}
+        </div>
+      )}
 
       {/* Summary Cards */}
       <PriceSummaryCards data={summary?.totals ?? null} />
