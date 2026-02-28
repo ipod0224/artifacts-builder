@@ -38,7 +38,7 @@ async function getClerkHandler() {
 
 // Proxyable API paths (exclude /api/rag/update for security)
 const PROXY_API_PATHS = [
-  '/api/prices/',
+  '/api/prices',
   '/api/rag/search',
   '/api/rag/stats',
   '/api/rag/documents'
