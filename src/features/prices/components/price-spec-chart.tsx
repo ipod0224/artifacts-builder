@@ -1,6 +1,6 @@
 'use client';
 
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
+import * as React from 'react';
 import {
   Card,
   CardContent,
@@ -8,12 +8,19 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent
-} from '@/components/ui/chart';
+import { EChartContainer } from '@/components/ui/echarts';
+import type { EChartsOption } from 'echarts';
+
+const FALLBACK_COLORS = [
+  '#2563eb',
+  '#dc2626',
+  '#16a34a',
+  '#ea580c',
+  '#9333ea',
+  '#0891b2',
+  '#ca8a04',
+  '#db2777'
+];
 
 interface SpecItem {
   source: string;
@@ -25,20 +32,22 @@ interface SpecItem {
   nominal_size: string | null;
 }
 
+/** High-contrast palette — distinguishable on white background */
 const SOURCE_COLORS: Record<string, string> = {
-  朝立: 'hsl(var(--chart-1))',
-  東元電機: 'hsl(var(--chart-2))',
-  三菱電機: 'hsl(var(--chart-3))',
-  鍾榮: 'hsl(var(--chart-4))',
-  萬蕙昇: 'hsl(var(--chart-5))',
-  銘宣: 'hsl(220, 70%, 55%)',
-  信佳電機: 'hsl(30, 80%, 55%)',
-  樺晟: 'hsl(160, 60%, 45%)'
+  朝立: '#2563eb', // blue-600
+  東元電機: '#dc2626', // red-600
+  三菱電機: '#16a34a', // green-600
+  鍾榮: '#ea580c', // orange-600
+  萬蕙昇: '#9333ea', // purple-600
+  銘宣: '#0891b2', // cyan-600
+  信佳電機: '#ca8a04', // yellow-600
+  樺晟: '#db2777', // pink-600
+  茂忠: '#4f46e5', // indigo-600
+  TCRI: '#64748b' // slate-500
 };
 
 function parseAmpere(ampere: string | null): number {
   if (!ampere) return 0;
-  // Handle JSON arrays like "[3, 5, 10, 15, 20, 30]" — use max value (frame AF)
   if (ampere.startsWith('[')) {
     try {
       const arr = JSON.parse(ampere) as number[];
@@ -49,11 +58,6 @@ function parseAmpere(ampere: string | null): number {
   }
   const num = parseFloat(ampere);
   return isNaN(num) ? 0 : num;
-}
-
-function getSpecKey(item: SpecItem): string {
-  if (item.ampere) return String(parseAmpere(item.ampere));
-  return item.size || item.spec_value || item.nominal_size || '';
 }
 
 function getSpecNumeric(item: SpecItem): number {
@@ -81,33 +85,14 @@ export function PriceSpecChart({
     );
   }
 
-  // Group by source, sort by spec numeric value
   const sources = Array.from(new Set(data.map((d) => d.source)));
   const sortedData = [...data]
     .filter((d) => getSpecNumeric(d) > 0)
     .sort((a, b) => getSpecNumeric(a) - getSpecNumeric(b));
 
-  // Build chart data: each point has spec as x-axis, price per source as y-axis
   const specValues = Array.from(new Set(sortedData.map(getSpecNumeric))).sort(
     (a, b) => a - b
   );
-  const chartData = specValues.map((spec) => {
-    const point: Record<string, number | string> = {
-      spec: spec.toString()
-    };
-    for (const source of sources) {
-      const items = sortedData.filter(
-        (d) => d.source === source && getSpecNumeric(d) === spec
-      );
-      if (items.length > 0) {
-        const avg = Math.round(
-          items.reduce((s, i) => s + i.sell_price, 0) / items.length
-        );
-        point[source] = avg;
-      }
-    }
-    return point;
-  });
 
   const specLabel =
     data[0]?.ampere != null
@@ -116,101 +101,103 @@ export function PriceSpecChart({
         ? '線徑 (mm²)'
         : '規格';
 
-  const chartConfig = sources.reduce(
-    (acc, source) => {
-      acc[source] = {
-        label: source,
-        color: SOURCE_COLORS[source] || 'hsl(var(--primary))'
-      };
-      return acc;
+  const fallbackColors = FALLBACK_COLORS;
+
+  const series: EChartsOption['series'] = sources.map((source, idx) => {
+    const seriesData = specValues.map((spec) => {
+      const items = sortedData.filter(
+        (d) => d.source === source && getSpecNumeric(d) === spec
+      );
+      if (items.length === 0) return null;
+      return Math.round(
+        items.reduce((s, i) => s + i.sell_price, 0) / items.length
+      );
+    });
+
+    const color =
+      SOURCE_COLORS[source] || fallbackColors[idx % fallbackColors.length];
+
+    return {
+      name: source,
+      type: 'line' as const,
+      smooth: true,
+      showSymbol: false,
+      connectNulls: true,
+      lineStyle: { width: 2 },
+      areaStyle: { opacity: 0.12 },
+      itemStyle: { color },
+      data: seriesData
+    };
+  });
+
+  const option: EChartsOption = {
+    grid: {
+      left: 8,
+      right: 8,
+      top: 24,
+      bottom: sources.length > 1 ? 32 : 8,
+      containLabel: true
     },
-    {} as Record<string, { label: string; color: string }>
-  ) satisfies ChartConfig;
+    legend: {
+      show: sources.length > 1,
+      bottom: 0,
+      type: 'scroll',
+      textStyle: { fontSize: 11 }
+    },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: specValues.map(String),
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: { fontSize: 10 }
+    },
+    yAxis: {
+      type: 'value',
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: {
+        fontSize: 10,
+        formatter: (v: number) =>
+          v >= 1000 ? `${(v / 1000).toFixed(0)}K` : `${v}`
+      },
+      splitLine: { lineStyle: { type: 'dashed' } }
+    },
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: unknown) => {
+        const items = params as Array<{
+          seriesName: string;
+          value: number | null;
+          marker: string;
+          axisValue: string;
+        }>;
+        const header = `${specLabel}: ${items[0]?.axisValue ?? ''}`;
+        const lines = items
+          .filter((i) => i.value != null)
+          .map(
+            (i) =>
+              `${i.marker} ${i.seriesName}: <b>$${Number(i.value).toLocaleString()}</b>`
+          );
+        return `${header}<br/>${lines.join('<br/>')}`;
+      }
+    },
+    dataZoom: undefined,
+    series
+  };
 
   return (
     <Card>
       <CardHeader className='px-4 pt-4 pb-2 sm:px-6 sm:pt-6'>
         <CardTitle className='text-base sm:text-lg'>
-          價格-規格曲線 — {category}
+          價格-規格曲線 — {category.toUpperCase()}
         </CardTitle>
         <CardDescription>
           {specLabel} vs 售價，{sources.length} 個通路
         </CardDescription>
       </CardHeader>
       <CardContent className='px-2 pt-2 sm:px-6'>
-        <ChartContainer
-          config={chartConfig}
-          className='aspect-auto h-[220px] w-full sm:h-[280px]'
-        >
-          <AreaChart
-            data={chartData}
-            margin={{ left: 4, right: 4, top: 8, bottom: 4 }}
-          >
-            <defs>
-              {sources.map((source) => (
-                <linearGradient
-                  key={source}
-                  id={`fill-${source}`}
-                  x1='0'
-                  y1='0'
-                  x2='0'
-                  y2='1'
-                >
-                  <stop
-                    offset='5%'
-                    stopColor={`var(--color-${source})`}
-                    stopOpacity={0.6}
-                  />
-                  <stop
-                    offset='95%'
-                    stopColor={`var(--color-${source})`}
-                    stopOpacity={0.05}
-                  />
-                </linearGradient>
-              ))}
-            </defs>
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey='spec'
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              minTickGap={24}
-              fontSize={10}
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tickMargin={4}
-              fontSize={10}
-              tickFormatter={(v: number) =>
-                v >= 1000 ? `${(v / 1000).toFixed(0)}K` : `${v}`
-              }
-              width={40}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={
-                <ChartTooltipContent
-                  formatter={(value, name) =>
-                    `${name}: $${Number(value).toLocaleString()}`
-                  }
-                />
-              }
-            />
-            {sources.map((source) => (
-              <Area
-                key={source}
-                dataKey={source}
-                type='monotone'
-                fill={`url(#fill-${source})`}
-                stroke={`var(--color-${source})`}
-                strokeWidth={2}
-                connectNulls
-              />
-            ))}
-          </AreaChart>
-        </ChartContainer>
+        <EChartContainer option={option} className='h-[220px] sm:h-[280px]' />
       </CardContent>
     </Card>
   );

@@ -26,7 +26,8 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-  SidebarRail
+  SidebarRail,
+  useSidebar
 } from '@/components/ui/sidebar';
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
 import { navItems } from '@/config/nav-config';
@@ -79,6 +80,8 @@ export default function AppSidebar() {
   const { user, organization } = useClerkSidebar();
   const router = useRouter();
   const filteredItems = useFilteredNavItems(navItems);
+  const { state: sidebarState } = useSidebar();
+  const isCollapsed = sidebarState === 'collapsed';
 
   React.useEffect(() => {
     // Side effects based on sidebar state changes
@@ -95,7 +98,35 @@ export default function AppSidebar() {
           <SidebarMenu>
             {filteredItems.map((item) => {
               const Icon = item.icon ? Icons[item.icon] : Icons.logo;
-              return item?.items && item?.items?.length > 0 ? (
+              const hasChildren = item?.items && item.items.length > 0;
+
+              if (hasChildren && isCollapsed) {
+                return (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton
+                      asChild
+                      tooltip={item.title}
+                      isActive={
+                        pathname === item.url ||
+                        item.items?.some((sub) => pathname === sub.url)
+                      }
+                    >
+                      <Link
+                        href={
+                          item.url !== '#'
+                            ? item.url
+                            : (item.items?.[0]?.url ?? '#')
+                        }
+                      >
+                        {item.icon && <Icon />}
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              }
+
+              return hasChildren ? (
                 <Collapsible
                   key={item.title}
                   asChild

@@ -168,12 +168,17 @@ export default function PricesPage() {
       <PriceSummaryCards data={summary?.totals ?? null} />
 
       {/* Source Type Overview */}
-      <SourceTypeOverview data={summary?.sourceTypes ?? []} />
+      <div id='section-sources'>
+        <SourceTypeOverview data={summary?.sourceTypes ?? []} />
+      </div>
 
       <Separator />
 
       {/* Category Selector */}
-      <div className='flex flex-col gap-3 sm:flex-row sm:items-center'>
+      <div
+        id='section-categories'
+        className='flex flex-col gap-3 sm:flex-row sm:items-center'
+      >
         <span className='text-sm font-medium'>品類篩選</span>
         <CategorySelect
           value={selectedCategory}
@@ -200,10 +205,12 @@ export default function PricesPage() {
       )}
 
       {/* Coverage Matrix */}
-      <CoverageMatrix
-        categories={summary?.categories ?? []}
-        sources={summary?.sources ?? []}
-      />
+      <div id='section-items'>
+        <CoverageMatrix
+          categories={summary?.categories ?? []}
+          sources={summary?.sources ?? []}
+        />
+      </div>
 
       {/* iOS Install Prompt */}
       <IOSInstallPrompt />

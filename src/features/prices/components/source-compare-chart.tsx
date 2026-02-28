@@ -1,6 +1,6 @@
 'use client';
 
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts';
+import * as React from 'react';
 import {
   Card,
   CardContent,
@@ -8,12 +8,8 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent
-} from '@/components/ui/chart';
+import { EChartContainer } from '@/components/ui/echarts';
+import type { EChartsOption } from 'echarts';
 
 interface SourceData {
   source: string;
@@ -25,17 +21,6 @@ interface SourceData {
   max_price: number;
   stddev_price: number;
 }
-
-const chartConfig = {
-  avg_sell_price: {
-    label: '平均售價',
-    color: 'var(--primary)'
-  },
-  avg_list_price: {
-    label: '平均牌價',
-    color: 'hsl(var(--chart-2))'
-  }
-} satisfies ChartConfig;
 
 export function SourceCompareChart({
   data,
@@ -55,19 +40,70 @@ export function SourceCompareChart({
     );
   }
 
-  const chartData = data.map((d) => ({
-    source: d.source,
-    avg_sell_price: d.avg_sell_price,
-    avg_list_price: d.avg_list_price,
-    item_count: d.item_count,
-    discount: d.avg_discount
-  }));
+  const option: EChartsOption = {
+    grid: { left: 8, right: 8, top: 24, bottom: 8, containLabel: true },
+    legend: { show: true, top: 0, right: 0, textStyle: { fontSize: 11 } },
+    xAxis: {
+      type: 'category',
+      data: data.map((d) => d.source),
+      axisTick: { alignWithLabel: true },
+      axisLine: { show: false },
+      axisLabel: { fontSize: 11 }
+    },
+    yAxis: {
+      type: 'value',
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: {
+        fontSize: 10,
+        formatter: (v: number) =>
+          v >= 1000 ? `${(v / 1000).toFixed(0)}K` : `${v}`
+      },
+      splitLine: { lineStyle: { type: 'dashed' } }
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params: unknown) => {
+        const items = params as Array<{
+          seriesName: string;
+          value: number;
+          marker: string;
+          axisValue: string;
+        }>;
+        const header = items[0]?.axisValue ?? '';
+        const lines = items.map(
+          (i) =>
+            `${i.marker} ${i.seriesName}: <b>$${i.value.toLocaleString()}</b>`
+        );
+        return `${header}<br/>${lines.join('<br/>')}`;
+      }
+    },
+    series: [
+      {
+        name: '平均牌價',
+        type: 'bar',
+        barGap: '20%',
+        barMaxWidth: 32,
+        itemStyle: { borderRadius: [4, 4, 0, 0], color: '#94a3b8' }, // slate-400 (牌價，較淡)
+        data: data.map((d) => d.avg_list_price)
+      },
+      {
+        name: '平均售價',
+        type: 'bar',
+        barMaxWidth: 32,
+        itemStyle: { borderRadius: [4, 4, 0, 0], color: '#2563eb' }, // blue-600 (售價，主色)
+
+        data: data.map((d) => d.avg_sell_price)
+      }
+    ]
+  };
 
   return (
     <Card>
       <CardHeader className='px-4 pt-4 pb-2 sm:px-6 sm:pt-6'>
         <CardTitle className='text-base sm:text-lg'>
-          跨源價格比較 — {category}
+          跨源價格比較 — {category.toUpperCase()}
         </CardTitle>
         <CardDescription>
           {data.length} 個通路，共 {data.reduce((s, d) => s + d.item_count, 0)}{' '}
@@ -75,58 +111,7 @@ export function SourceCompareChart({
         </CardDescription>
       </CardHeader>
       <CardContent className='px-2 pt-2 sm:px-6'>
-        <ChartContainer
-          config={chartConfig}
-          className='aspect-auto h-[220px] w-full sm:h-[280px]'
-        >
-          <BarChart
-            data={chartData}
-            margin={{ left: 4, right: 4, top: 8, bottom: 4 }}
-          >
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey='source'
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              fontSize={11}
-            />
-            <YAxis
-              tickLine={false}
-              axisLine={false}
-              tickMargin={4}
-              fontSize={10}
-              tickFormatter={(v: number) =>
-                v >= 1000 ? `${(v / 1000).toFixed(0)}K` : `${v}`
-              }
-              width={40}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={
-                <ChartTooltipContent
-                  formatter={(value, name) => {
-                    const label =
-                      name === 'avg_sell_price' ? '平均售價' : '平均牌價';
-                    return `${label}: $${Number(value).toLocaleString()}`;
-                  }}
-                />
-              }
-            />
-            <Bar
-              dataKey='avg_list_price'
-              fill='var(--color-avg_list_price)'
-              radius={[4, 4, 0, 0]}
-              barSize={24}
-            />
-            <Bar
-              dataKey='avg_sell_price'
-              fill='var(--color-avg_sell_price)'
-              radius={[4, 4, 0, 0]}
-              barSize={24}
-            />
-          </BarChart>
-        </ChartContainer>
+        <EChartContainer option={option} className='h-[220px] sm:h-[280px]' />
       </CardContent>
     </Card>
   );

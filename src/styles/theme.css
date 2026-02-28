@@ -20,10 +20,12 @@ body {
 /* We need to override Next.js font variables on body to use html's values */
 /* Using initial removes the property, allowing parent (html) values to cascade */
 [data-theme] body {
-  /* Remove Next.js font variables to allow theme variables from html to cascade */
-  --font-sans: initial;
-  --font-mono: initial;
-  --font-serif: initial;
-  /* Apply font-family - will now resolve from html's [data-theme] variables */
+  /* SF Pro (西文) + PingFang TC (繁體中文) as primary fonts */
+  --font-sans: 'SF Pro', 'SF Pro Text', 'PingFang TC', -apple-system,
+    BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    'Noto Sans TC', sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+  --font-mono: 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
+  --font-serif: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
   font-family: var(--font-sans);
 }

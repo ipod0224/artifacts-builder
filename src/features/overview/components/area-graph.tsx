@@ -1,8 +1,6 @@
 'use client';
 
 import { IconTrendingUp } from '@tabler/icons-react';
-import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
-
 import {
   Card,
   CardContent,
@@ -11,12 +9,8 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent
-} from '@/components/ui/chart';
+import { EChartContainer } from '@/components/ui/echarts';
+import type { EChartsOption } from 'echarts';
 
 const chartData = [
   { month: 'January', desktop: 186, mobile: 80 },
@@ -27,19 +21,53 @@ const chartData = [
   { month: 'June', desktop: 214, mobile: 140 }
 ];
 
-const chartConfig = {
-  visitors: {
-    label: 'Visitors'
+const option: EChartsOption = {
+  grid: { left: 12, right: 12, top: 8, bottom: 24, containLabel: false },
+  xAxis: {
+    type: 'category',
+    boundaryGap: false,
+    data: chartData.map((d) => d.month.slice(0, 3)),
+    axisTick: { show: false },
+    axisLine: { show: false }
   },
-  desktop: {
-    label: 'Desktop',
-    color: 'var(--primary)'
+  yAxis: { type: 'value', show: false },
+  tooltip: {
+    trigger: 'axis',
+    formatter: (params: unknown) => {
+      const items = params as Array<{
+        seriesName: string;
+        value: number;
+        marker: string;
+        dataIndex: number;
+      }>;
+      const header = chartData[items[0]?.dataIndex ?? 0]?.month ?? '';
+      const lines = items.map(
+        (i) => `${i.marker} ${i.seriesName}: <b>${i.value.toLocaleString()}</b>`
+      );
+      return `${header}<br/>${lines.join('<br/>')}`;
+    }
   },
-  mobile: {
-    label: 'Mobile',
-    color: 'var(--primary)'
-  }
-} satisfies ChartConfig;
+  series: [
+    {
+      name: 'Mobile',
+      type: 'line',
+      stack: 'total',
+      smooth: true,
+      showSymbol: false,
+      areaStyle: { opacity: 0.4 },
+      data: chartData.map((d) => d.mobile)
+    },
+    {
+      name: 'Desktop',
+      type: 'line',
+      stack: 'total',
+      smooth: true,
+      showSymbol: false,
+      areaStyle: { opacity: 0.6 },
+      data: chartData.map((d) => d.desktop)
+    }
+  ]
+};
 
 export function AreaGraph() {
   return (
@@ -51,72 +79,7 @@ export function AreaGraph() {
         </CardDescription>
       </CardHeader>
       <CardContent className='px-2 pt-4 sm:px-6 sm:pt-6'>
-        <ChartContainer
-          config={chartConfig}
-          className='aspect-auto h-[250px] w-full'
-        >
-          <AreaChart
-            data={chartData}
-            margin={{
-              left: 12,
-              right: 12
-            }}
-          >
-            <defs>
-              <linearGradient id='fillDesktop' x1='0' y1='0' x2='0' y2='1'>
-                <stop
-                  offset='5%'
-                  stopColor='var(--color-desktop)'
-                  stopOpacity={1.0}
-                />
-                <stop
-                  offset='95%'
-                  stopColor='var(--color-desktop)'
-                  stopOpacity={0.1}
-                />
-              </linearGradient>
-              <linearGradient id='fillMobile' x1='0' y1='0' x2='0' y2='1'>
-                <stop
-                  offset='5%'
-                  stopColor='var(--color-mobile)'
-                  stopOpacity={0.8}
-                />
-                <stop
-                  offset='95%'
-                  stopColor='var(--color-mobile)'
-                  stopOpacity={0.1}
-                />
-              </linearGradient>
-            </defs>
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey='month'
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              minTickGap={32}
-              tickFormatter={(value) => value.slice(0, 3)}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={<ChartTooltipContent indicator='dot' />}
-            />
-            <Area
-              dataKey='mobile'
-              type='natural'
-              fill='url(#fillMobile)'
-              stroke='var(--color-mobile)'
-              stackId='a'
-            />
-            <Area
-              dataKey='desktop'
-              type='natural'
-              fill='url(#fillDesktop)'
-              stroke='var(--color-desktop)'
-              stackId='a'
-            />
-          </AreaChart>
-        </ChartContainer>
+        <EChartContainer option={option} className='h-[250px]' />
       </CardContent>
       <CardFooter>
         <div className='flex w-full items-start gap-2 text-sm'>

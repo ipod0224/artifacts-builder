@@ -1,8 +1,6 @@
 'use client';
 
 import * as React from 'react';
-import { Bar, BarChart, CartesianGrid, XAxis } from 'recharts';
-
 import {
   Card,
   CardContent,
@@ -10,14 +8,8 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent
-} from '@/components/ui/chart';
-
-export const description = 'An interactive bar chart';
+import { EChartContainer } from '@/components/ui/echarts';
+import type { EChartsOption } from 'echarts';
 
 const chartData = [
   { date: '2024-04-01', desktop: 222, mobile: 150 },
@@ -113,27 +105,21 @@ const chartData = [
   { date: '2024-06-30', desktop: 446, mobile: 400 }
 ];
 
-const chartConfig = {
-  views: {
-    label: 'Page Views'
-  },
-  desktop: {
-    label: 'Desktop',
-    color: 'var(--primary)'
-  },
-  mobile: {
-    label: 'Mobile',
-    color: 'var(--primary)'
-  },
-  error: {
-    label: 'Error',
-    color: 'var(--primary)'
-  }
-} satisfies ChartConfig;
+const chartLabels: Record<string, string> = {
+  desktop: 'Desktop',
+  mobile: 'Mobile',
+  error: 'Error'
+};
+
+function formatDate(dateStr: string, opts?: Intl.DateTimeFormatOptions) {
+  return new Date(dateStr).toLocaleDateString(
+    'en-US',
+    opts ?? { month: 'short', day: 'numeric' }
+  );
+}
 
 export function BarGraph() {
-  const [activeChart, setActiveChart] =
-    React.useState<keyof typeof chartConfig>('desktop');
+  const [activeChart, setActiveChart] = React.useState<string>('desktop');
 
   const total = React.useMemo(
     () => ({
@@ -144,10 +130,7 @@ export function BarGraph() {
   );
 
   const [isClient, setIsClient] = React.useState(false);
-
-  React.useEffect(() => {
-    setIsClient(true);
-  }, []);
+  React.useEffect(() => setIsClient(true), []);
 
   React.useEffect(() => {
     if (activeChart === 'error') {
@@ -155,9 +138,60 @@ export function BarGraph() {
     }
   }, [activeChart]);
 
-  if (!isClient) {
-    return null;
-  }
+  const option = React.useMemo<EChartsOption>(
+    () => ({
+      grid: { left: 12, right: 12, top: 8, bottom: 24, containLabel: false },
+      xAxis: {
+        type: 'category',
+        data: chartData.map((d) => formatDate(d.date)),
+        axisLabel: { fontSize: 10, interval: 'auto' },
+        axisTick: { show: false },
+        axisLine: { show: false }
+      },
+      yAxis: { type: 'value', show: false },
+      tooltip: {
+        trigger: 'axis',
+        formatter: (params: unknown) => {
+          const p = (params as Array<{ dataIndex: number; value: number }>)[0];
+          if (!p) return '';
+          const d = chartData[p.dataIndex];
+          const label = formatDate(d.date, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          });
+          return `${label}<br/>${chartLabels[activeChart]}: <b>${p.value.toLocaleString()}</b>`;
+        }
+      },
+      series: [
+        {
+          type: 'bar',
+          data: chartData.map(
+            (d) => d[activeChart as keyof typeof d] as number
+          ),
+          itemStyle: {
+            borderRadius: [4, 4, 0, 0],
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: 'var(--primary)' },
+                { offset: 1, color: 'var(--primary)' }
+              ]
+            },
+            opacity: 0.8
+          },
+          emphasis: { itemStyle: { opacity: 1 } }
+        }
+      ]
+    }),
+    [activeChart]
+  );
+
+  if (!isClient) return null;
 
   return (
     <Card className='@container/card !pt-3'>
@@ -173,17 +207,16 @@ export function BarGraph() {
         </div>
         <div className='flex'>
           {['desktop', 'mobile', 'error'].map((key) => {
-            const chart = key as keyof typeof chartConfig;
-            if (!chart || total[key as keyof typeof total] === 0) return null;
+            if (total[key as keyof typeof total] === 0) return null;
             return (
               <button
-                key={chart}
-                data-active={activeChart === chart}
+                key={key}
+                data-active={activeChart === key}
                 className='data-[active=true]:bg-primary/5 hover:bg-primary/5 relative flex flex-1 flex-col justify-center gap-1 border-t px-6 py-4 text-left transition-colors duration-200 even:border-l sm:border-t-0 sm:border-l sm:px-8 sm:py-6'
-                onClick={() => setActiveChart(chart)}
+                onClick={() => setActiveChart(key)}
               >
                 <span className='text-muted-foreground text-xs'>
-                  {chartConfig[chart].label}
+                  {chartLabels[key]}
                 </span>
                 <span className='text-lg leading-none font-bold sm:text-3xl'>
                   {total[key as keyof typeof total]?.toLocaleString()}
@@ -194,69 +227,7 @@ export function BarGraph() {
         </div>
       </CardHeader>
       <CardContent className='px-2 pt-4 sm:px-6 sm:pt-6'>
-        <ChartContainer
-          config={chartConfig}
-          className='aspect-auto h-[250px] w-full'
-        >
-          <BarChart
-            data={chartData}
-            margin={{
-              left: 12,
-              right: 12
-            }}
-          >
-            <defs>
-              <linearGradient id='fillBar' x1='0' y1='0' x2='0' y2='1'>
-                <stop
-                  offset='0%'
-                  stopColor='var(--primary)'
-                  stopOpacity={0.8}
-                />
-                <stop
-                  offset='100%'
-                  stopColor='var(--primary)'
-                  stopOpacity={0.2}
-                />
-              </linearGradient>
-            </defs>
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey='date'
-              tickLine={false}
-              axisLine={false}
-              tickMargin={8}
-              minTickGap={32}
-              tickFormatter={(value) => {
-                const date = new Date(value);
-                return date.toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric'
-                });
-              }}
-            />
-            <ChartTooltip
-              cursor={{ fill: 'var(--primary)', opacity: 0.1 }}
-              content={
-                <ChartTooltipContent
-                  className='w-[150px]'
-                  nameKey='views'
-                  labelFormatter={(value) => {
-                    return new Date(value).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric'
-                    });
-                  }}
-                />
-              }
-            />
-            <Bar
-              dataKey={activeChart}
-              fill='url(#fillBar)'
-              radius={[4, 4, 0, 0]}
-            />
-          </BarChart>
-        </ChartContainer>
+        <EChartContainer option={option} className='h-[250px]' />
       </CardContent>
     </Card>
   );

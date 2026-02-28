@@ -98,7 +98,7 @@ export function InfoSidebar({
           </InfobarGroupContent>
         </InfobarGroup>
       </InfobarContent>
-      <InfobarRail />
+      {/* InfobarRail removed — was cutting off right edge of content */}
     </Infobar>
   );
 }
