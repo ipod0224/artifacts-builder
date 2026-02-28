@@ -58,6 +58,30 @@ function isWriteRoute(pathname: string): boolean {
 }
 
 export default async function middleware(req: NextRequest) {
+  // --- Basic Auth gate (self-hosted, non-public) ---
+  const authUser = process.env.AUTH_USER;
+  const authPass = process.env.AUTH_PASSWORD;
+  if (authUser && authPass) {
+    const authorization = req.headers.get('authorization');
+    let authenticated = false;
+    if (authorization) {
+      const [scheme, encoded] = authorization.split(' ');
+      if (scheme === 'Basic' && encoded) {
+        const decoded = atob(encoded);
+        const [u, p] = decoded.split(':');
+        if (u === authUser && p === authPass) {
+          authenticated = true;
+        }
+      }
+    }
+    if (!authenticated) {
+      return new NextResponse('Authentication required', {
+        status: 401,
+        headers: { 'WWW-Authenticate': 'Basic realm="Prices Dashboard"' }
+      });
+    }
+  }
+
   const apiProxyUrl = process.env.API_PROXY_URL;
 
   // Block write routes on Vercel (only available locally)
@@ -74,7 +98,12 @@ export default async function middleware(req: NextRequest) {
       req.nextUrl.pathname + req.nextUrl.search,
       apiProxyUrl
     );
-    return NextResponse.rewrite(target);
+    const headers = new Headers(req.headers);
+    const bearerToken = process.env.TUNNEL_BEARER_TOKEN;
+    if (bearerToken) {
+      headers.set('Authorization', `Bearer ${bearerToken}`);
+    }
+    return NextResponse.rewrite(target, { request: { headers } });
   }
 
   // API routes and local-only pages skip Clerk entirely
