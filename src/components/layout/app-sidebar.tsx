@@ -31,7 +31,7 @@ import {
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
 import { navItems } from '@/config/nav-config';
 import { useMediaQuery } from '@/hooks/use-media-query';
-import { useOrganization, useUser } from '@clerk/nextjs';
+import { CLERK_ENABLED } from '@/lib/clerk-available';
 import { useFilteredNavItems } from '@/hooks/use-nav';
 import {
   IconBell,
@@ -41,18 +41,42 @@ import {
   IconLogout,
   IconUserCircle
 } from '@tabler/icons-react';
-import { SignOutButton } from '@clerk/nextjs';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import * as React from 'react';
 import { Icons } from '../icons';
 import { OrgSwitcher } from '../org-switcher';
 
+// Lazy-loaded SignOutButton (only rendered when CLERK_ENABLED)
+function ClerkSignOut() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { SignOutButton } = require('@clerk/nextjs');
+  return (
+    <DropdownMenuItem>
+      <IconLogout className='mr-2 h-4 w-4' />
+      <SignOutButton redirectUrl='/auth/sign-in' />
+    </DropdownMenuItem>
+  );
+}
+
+// Safe Clerk hooks — only called when CLERK_ENABLED (build-time constant)
+function useClerkSidebar() {
+  if (!CLERK_ENABLED) {
+    return { user: null, organization: null };
+  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, react-hooks/rules-of-hooks
+  const { useUser, useOrganization } = require('@clerk/nextjs');
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { user } = useUser();
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { organization } = useOrganization();
+  return { user, organization };
+}
+
 export default function AppSidebar() {
   const pathname = usePathname();
   const { isOpen } = useMediaQuery();
-  const { user } = useUser();
-  const { organization } = useOrganization();
+  const { user, organization } = useClerkSidebar();
   const router = useRouter();
   const filteredItems = useFilteredNavItems(navItems);
 
@@ -184,10 +208,7 @@ export default function AppSidebar() {
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <IconLogout className='mr-2 h-4 w-4' />
-                  <SignOutButton redirectUrl='/auth/sign-in' />
-                </DropdownMenuItem>
+                {CLERK_ENABLED && <ClerkSignOut />}
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarMenuItem>

@@ -1,12 +1,15 @@
-import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 
-export default async function Dashboard() {
-  const { userId } = await auth();
+const CLERK_ENABLED = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 
-  if (!userId) {
-    return redirect('/auth/sign-in');
-  } else {
-    redirect('/dashboard/overview');
+export default async function Dashboard() {
+  if (CLERK_ENABLED) {
+    const { auth } = await import('@clerk/nextjs/server');
+    const { userId } = await auth();
+    if (!userId) {
+      return redirect('/auth/sign-in');
+    }
   }
+
+  redirect('/dashboard/overview');
 }

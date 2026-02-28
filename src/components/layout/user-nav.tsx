@@ -10,10 +10,29 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { UserAvatarProfile } from '@/components/user-avatar-profile';
-import { SignOutButton, useUser } from '@clerk/nextjs';
+import { CLERK_ENABLED } from '@/lib/clerk-available';
 import { useRouter } from 'next/navigation';
+
+function ClerkSignOutItem() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { SignOutButton } = require('@clerk/nextjs');
+  return (
+    <DropdownMenuItem>
+      <SignOutButton redirectUrl='/auth/sign-in' />
+    </DropdownMenuItem>
+  );
+}
+
+function useClerkUser() {
+  if (!CLERK_ENABLED) return { user: null };
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const clerk = require('@clerk/nextjs');
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  return clerk.useUser();
+}
+
 export function UserNav() {
-  const { user } = useUser();
+  const { user } = useClerkUser();
   const router = useRouter();
   if (user) {
     return (
@@ -49,9 +68,7 @@ export function UserNav() {
             <DropdownMenuItem>New Team</DropdownMenuItem>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuItem>
-            <SignOutButton redirectUrl='/auth/sign-in' />
-          </DropdownMenuItem>
+          {CLERK_ENABLED && <ClerkSignOutItem />}
         </DropdownMenuContent>
       </DropdownMenu>
     );

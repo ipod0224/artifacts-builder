@@ -17,6 +17,7 @@
  */
 
 import { useMemo } from 'react';
+import { CLERK_ENABLED } from '@/lib/clerk-available';
 import { useOrganization, useUser } from '@clerk/nextjs';
 import type { NavItem } from '@/types';
 
@@ -26,9 +27,25 @@ import type { NavItem } from '@/types';
  * @param items - Array of navigation items to filter
  * @returns Filtered items
  */
-export function useFilteredNavItems(items: NavItem[]) {
+
+/**
+ * Wrapper that only calls Clerk hooks when CLERK_ENABLED is true.
+ * CLERK_ENABLED is a build-time constant (NEXT_PUBLIC_), so the branch
+ * never changes between renders — safe for React hooks rules.
+ */
+function useClerkContext() {
+  if (!CLERK_ENABLED) {
+    return { organization: null, membership: null, user: null };
+  }
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const { organization, membership } = useOrganization();
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const { user } = useUser();
+  return { organization, membership, user };
+}
+
+export function useFilteredNavItems(items: NavItem[]) {
+  const { organization, membership, user } = useClerkContext();
 
   // Memoize context and permissions
   const accessContext = useMemo(() => {

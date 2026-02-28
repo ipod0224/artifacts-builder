@@ -1,6 +1,6 @@
 'use client';
 
-import { useAuth, useOrganizationList } from '@clerk/nextjs';
+import { CLERK_ENABLED } from '@/lib/clerk-available';
 import { Check, ChevronsUpDown, GalleryVerticalEnd, Plus } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -22,17 +22,30 @@ import {
 } from '@/components/ui/sidebar';
 import { useEffect } from 'react';
 
+function useClerkOrg() {
+  if (!CLERK_ENABLED) {
+    return {
+      isLoaded: true,
+      setActive: null,
+      userMemberships: { data: null, revalidate: null },
+      orgId: null
+    };
+  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const clerk = require('@clerk/nextjs');
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { isLoaded, setActive, userMemberships } = clerk.useOrganizationList({
+    userMemberships: { infinite: true, keepPreviousData: false }
+  });
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { orgId } = clerk.useAuth();
+  return { isLoaded, setActive, userMemberships, orgId };
+}
+
 export function OrgSwitcher() {
   const { isMobile, state } = useSidebar();
   const router = useRouter();
-  const { isLoaded, setActive, userMemberships } = useOrganizationList({
-    userMemberships: {
-      infinite: true,
-      keepPreviousData: false
-    }
-  });
-
-  const { orgId } = useAuth();
+  const { isLoaded, setActive, userMemberships, orgId } = useClerkOrg();
 
   useEffect(() => {
     console.log('revalidating memberships');
@@ -42,8 +55,9 @@ export function OrgSwitcher() {
   }, [orgId]);
 
   // Get the currently active organization
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const activeOrganization = userMemberships?.data?.find(
-    (membership) => membership.organization.id === orgId
+    (membership: any) => membership.organization.id === orgId
   )?.organization;
 
   // Handle organization switch
@@ -165,8 +179,9 @@ export function OrgSwitcher() {
                   {displayOrganization.name}
                 </span>
                 <span className='text-muted-foreground truncate text-xs'>
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {userMemberships.data.find(
-                    (m) => m.organization.id === displayOrganization.id
+                    (m: any) => m.organization.id === displayOrganization.id
                   )?.role || 'Organization'}
                 </span>
               </div>
@@ -188,7 +203,8 @@ export function OrgSwitcher() {
             <DropdownMenuLabel className='text-muted-foreground text-xs'>
               Organizations
             </DropdownMenuLabel>
-            {userMemberships.data.map((membership, index) => {
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+            {userMemberships.data.map((membership: any, index: number) => {
               const isActive = membership.organization.id === orgId;
               return (
                 <DropdownMenuItem

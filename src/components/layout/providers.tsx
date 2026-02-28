@@ -1,9 +1,28 @@
 'use client';
+import { CLERK_ENABLED } from '@/lib/clerk-available';
 import { ClerkProvider } from '@clerk/nextjs';
 import { dark } from '@clerk/themes';
 import { useTheme } from 'next-themes';
 import React from 'react';
 import { ActiveThemeProvider } from '../themes/active-theme';
+
+function MaybeClerk({ children }: { children: React.ReactNode }) {
+  const { resolvedTheme } = useTheme();
+
+  if (!CLERK_ENABLED) {
+    return <>{children}</>;
+  }
+
+  return (
+    <ClerkProvider
+      appearance={{
+        baseTheme: resolvedTheme === 'dark' ? dark : undefined
+      }}
+    >
+      {children}
+    </ClerkProvider>
+  );
+}
 
 export default function Providers({
   activeThemeValue,
@@ -12,20 +31,9 @@ export default function Providers({
   activeThemeValue: string;
   children: React.ReactNode;
 }) {
-  // we need the resolvedTheme value to set the baseTheme for clerk based on the dark or light theme
-  const { resolvedTheme } = useTheme();
-
   return (
-    <>
-      <ActiveThemeProvider initialTheme={activeThemeValue}>
-        <ClerkProvider
-          appearance={{
-            baseTheme: resolvedTheme === 'dark' ? dark : undefined
-          }}
-        >
-          {children}
-        </ClerkProvider>
-      </ActiveThemeProvider>
-    </>
+    <ActiveThemeProvider initialTheme={activeThemeValue}>
+      <MaybeClerk>{children}</MaybeClerk>
+    </ActiveThemeProvider>
   );
 }
