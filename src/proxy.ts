@@ -57,16 +57,36 @@ function isWriteRoute(pathname: string): boolean {
   return WRITE_ROUTES.some((p) => pathname.startsWith(p));
 }
 
+/** Set auth cookie on a response if needed. */
+function maybeSetAuthCookie(
+  response: NextResponse,
+  needsCookie: boolean,
+  token: string
+): NextResponse {
+  if (needsCookie) {
+    response.cookies.set('_ab_auth', token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 30 // 30 days
+    });
+  }
+  return response;
+}
+
 export default async function middleware(req: NextRequest) {
-  // --- Basic Auth gate (self-hosted, non-public) ---
-  // Browser fetch() doesn't send Basic Auth headers automatically,
-  // so we persist auth in a signed cookie after the first challenge.
+  // --- Basic Auth gate (cookie + header) ---
+  // Browser fetch() doesn't auto-send Basic Auth headers,
+  // so we persist auth in a cookie after the first challenge.
+  let needsAuthCookie = false;
+  let authToken = '';
   const authUser = process.env.AUTH_USER;
   const authPass = process.env.AUTH_PASSWORD;
+
   if (authUser && authPass) {
+    authToken = btoa(`${authUser}:${authPass}`);
     const authCookie = req.cookies.get('_ab_auth')?.value;
-    const expectedToken = btoa(`${authUser}:${authPass}`);
-    let authenticated = authCookie === expectedToken;
+    let authenticated = authCookie === authToken;
 
     if (!authenticated) {
       const authorization = req.headers.get('authorization');
@@ -77,6 +97,7 @@ export default async function middleware(req: NextRequest) {
           const [u, p] = decoded.split(':');
           if (u === authUser && p === authPass) {
             authenticated = true;
+            needsAuthCookie = true; // first auth via header, set cookie
           }
         }
       }
@@ -88,27 +109,19 @@ export default async function middleware(req: NextRequest) {
         headers: { 'WWW-Authenticate': 'Basic realm="Prices Dashboard"' }
       });
     }
-
-    // Set auth cookie so fetch() requests are authenticated too
-    if (!authCookie) {
-      const response = NextResponse.redirect(req.url);
-      response.cookies.set('_ab_auth', expectedToken, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 30 // 30 days
-      });
-      return response;
-    }
   }
 
   const apiProxyUrl = process.env.API_PROXY_URL;
 
   // Block write routes on Vercel (only available locally)
   if (process.env.VERCEL && isWriteRoute(req.nextUrl.pathname)) {
-    return NextResponse.json(
-      { error: 'This endpoint is not available in production' },
-      { status: 403 }
+    return maybeSetAuthCookie(
+      NextResponse.json(
+        { error: 'This endpoint is not available in production' },
+        { status: 403 }
+      ),
+      needsAuthCookie,
+      authToken
     );
   }
 
@@ -123,21 +136,26 @@ export default async function middleware(req: NextRequest) {
     if (bearerToken) {
       headers.set('Authorization', `Bearer ${bearerToken}`);
     }
-    return NextResponse.rewrite(target, { request: { headers } });
+    return maybeSetAuthCookie(
+      NextResponse.rewrite(target, { request: { headers } }),
+      needsAuthCookie,
+      authToken
+    );
   }
 
   // API routes and local-only pages skip Clerk entirely
   if (isApiRoute(req) || isLocalOnlyRoute(req)) {
-    return NextResponse.next();
+    return maybeSetAuthCookie(NextResponse.next(), needsAuthCookie, authToken);
   }
 
   // Only use Clerk when keys are configured
   const handler = await getClerkHandler();
   if (handler) {
-    return handler(req);
+    const res = await handler(req);
+    return maybeSetAuthCookie(res, needsAuthCookie, authToken);
   }
 
-  return NextResponse.next();
+  return maybeSetAuthCookie(NextResponse.next(), needsAuthCookie, authToken);
 }
 
 export const config = {
