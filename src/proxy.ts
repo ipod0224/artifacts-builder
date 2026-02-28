@@ -59,26 +59,46 @@ function isWriteRoute(pathname: string): boolean {
 
 export default async function middleware(req: NextRequest) {
   // --- Basic Auth gate (self-hosted, non-public) ---
+  // Browser fetch() doesn't send Basic Auth headers automatically,
+  // so we persist auth in a signed cookie after the first challenge.
   const authUser = process.env.AUTH_USER;
   const authPass = process.env.AUTH_PASSWORD;
   if (authUser && authPass) {
-    const authorization = req.headers.get('authorization');
-    let authenticated = false;
-    if (authorization) {
-      const [scheme, encoded] = authorization.split(' ');
-      if (scheme === 'Basic' && encoded) {
-        const decoded = atob(encoded);
-        const [u, p] = decoded.split(':');
-        if (u === authUser && p === authPass) {
-          authenticated = true;
+    const authCookie = req.cookies.get('_ab_auth')?.value;
+    const expectedToken = btoa(`${authUser}:${authPass}`);
+    let authenticated = authCookie === expectedToken;
+
+    if (!authenticated) {
+      const authorization = req.headers.get('authorization');
+      if (authorization) {
+        const [scheme, encoded] = authorization.split(' ');
+        if (scheme === 'Basic' && encoded) {
+          const decoded = atob(encoded);
+          const [u, p] = decoded.split(':');
+          if (u === authUser && p === authPass) {
+            authenticated = true;
+          }
         }
       }
     }
+
     if (!authenticated) {
       return new NextResponse('Authentication required', {
         status: 401,
         headers: { 'WWW-Authenticate': 'Basic realm="Prices Dashboard"' }
       });
+    }
+
+    // Set auth cookie so fetch() requests are authenticated too
+    if (!authCookie) {
+      const response = NextResponse.redirect(req.url);
+      response.cookies.set('_ab_auth', expectedToken, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 24 * 30 // 30 days
+      });
+      return response;
     }
   }
 
