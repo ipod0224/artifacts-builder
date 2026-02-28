@@ -16,12 +16,32 @@ const META_THEME_COLORS = {
 };
 
 export const metadata: Metadata = {
-  title: 'Next Shadcn',
-  description: 'Basic dashboard with Next.js and Shadcn'
+  title: '價格情報 Dashboard',
+  description: '跨源價格趨勢合理性與一致性分析',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: '價格情報'
+  },
+  formatDetection: {
+    telephone: false
+  },
+  icons: {
+    apple: [
+      {
+        url: '/icons/apple-touch-icon.png',
+        sizes: '180x180',
+        type: 'image/png'
+      }
+    ]
+  }
 };
 
 export const viewport: Viewport = {
-  themeColor: META_THEME_COLORS.light
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: META_THEME_COLORS.light },
+    { media: '(prefers-color-scheme: dark)', color: META_THEME_COLORS.dark }
+  ]
 };
 
 export default async function RootLayout({
@@ -34,7 +54,11 @@ export default async function RootLayout({
   const themeToApply = activeThemeValue || DEFAULT_THEME;
 
   return (
-    <html lang='en' suppressHydrationWarning={true} data-theme={themeToApply}>
+    <html
+      lang='zh-TW'
+      suppressHydrationWarning={true}
+      data-theme={themeToApply}
+    >
       <head>
         <script
           dangerouslySetInnerHTML={{

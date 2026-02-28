@@ -7,7 +7,12 @@ import { PriceSpecChart } from '@/features/prices/components/price-spec-chart';
 import { CoverageMatrix } from '@/features/prices/components/coverage-matrix';
 import { CategorySelect } from '@/features/prices/components/category-select';
 import { Separator } from '@/components/ui/separator';
-import { ALLOWED_CATEGORIES } from '@/features/prices/constants';
+import {
+  ALLOWED_CATEGORIES,
+  type SourceTypeStat
+} from '@/features/prices/constants';
+import { IOSInstallPrompt } from '@/features/prices/components/ios-install-prompt';
+import { SourceTypeOverview } from '@/features/prices/components/source-type-overview';
 
 interface SummaryResponse {
   success: boolean;
@@ -26,6 +31,7 @@ interface SummaryResponse {
       max_price: number;
     }[];
     sources: { source: string; count: number; categories: string[] }[];
+    sourceTypes: SourceTypeStat[];
     recentUpdates: {
       category: string;
       source: string;
@@ -161,6 +167,9 @@ export default function PricesPage() {
       {/* Summary Cards */}
       <PriceSummaryCards data={summary?.totals ?? null} />
 
+      {/* Source Type Overview */}
+      <SourceTypeOverview data={summary?.sourceTypes ?? []} />
+
       <Separator />
 
       {/* Category Selector */}
@@ -195,6 +204,9 @@ export default function PricesPage() {
         categories={summary?.categories ?? []}
         sources={summary?.sources ?? []}
       />
+
+      {/* iOS Install Prompt */}
+      <IOSInstallPrompt />
     </div>
   );
 }

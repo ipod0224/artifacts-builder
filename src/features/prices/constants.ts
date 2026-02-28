@@ -40,6 +40,15 @@ export const CATEGORY_LABELS: Record<PriceCategory, string> = {
   'thermal-relay': '熱動過載電驛'
 };
 
+export interface SourceTypeStat {
+  source_type: string;
+  count: number;
+  sources: number;
+  categories: number;
+  avg_price: number;
+  last_sync: string;
+}
+
 /** Short labels for compact display (e.g., coverage matrix) */
 export const CATEGORY_SHORT_LABELS: Record<PriceCategory, string> = {
   cable: '電纜',

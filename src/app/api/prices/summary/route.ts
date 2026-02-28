@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
-    const [categoryStats, sourceStats, totals, recentUpdates] =
+    const [categoryStats, sourceStats, totals, recentUpdates, sourceTypeStats] =
       await Promise.all([
         sql`
         SELECT category, COUNT(*)::int as count,
@@ -36,6 +36,19 @@ export async function GET() {
         GROUP BY category, source
         ORDER BY MAX(updated_at) DESC
         LIMIT 10
+      `,
+        sql`
+        SELECT
+          source_type,
+          COUNT(*)::int as count,
+          COUNT(DISTINCT source)::int as sources,
+          COUNT(DISTINCT category)::int as categories,
+          ROUND(AVG(sell_price)::numeric, 0)::int as avg_price,
+          MAX(updated_at) as last_sync
+        FROM prices
+        WHERE sell_price > 0
+        GROUP BY source_type
+        ORDER BY count DESC
       `
       ]);
 
@@ -45,6 +58,7 @@ export async function GET() {
         totals: totals[0],
         categories: categoryStats,
         sources: sourceStats,
+        sourceTypes: sourceTypeStats,
         recentUpdates
       }
     });
