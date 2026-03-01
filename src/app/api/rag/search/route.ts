@@ -95,29 +95,39 @@ function tokenizeQuery(query: string): string[] {
 
 // --- Embedding ---
 
-async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await fetch(`${OLLAMA_URL}/api/embed`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: MODEL_NAME,
-      input: [text],
-      keep_alive: '5m'
-    })
-  });
+async function generateEmbedding(text: string): Promise<number[] | null> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10_000);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Ollama embedding 失敗: ${errorText}`);
-  }
+    const response = await fetch(`${OLLAMA_URL}/api/embed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: MODEL_NAME,
+        input: [text],
+        keep_alive: '5m'
+      }),
+      signal: controller.signal
+    });
 
-  const result = await response.json();
-  if (result.embeddings && result.embeddings.length > 0) {
-    return result.embeddings[0];
-  } else if (result.embedding) {
-    return result.embedding;
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const result = await response.json();
+    if (result.embeddings && result.embeddings.length > 0) {
+      return result.embeddings[0];
+    } else if (result.embedding) {
+      return result.embedding;
+    }
+    return null;
+  } catch {
+    // Ollama 不可用（Vercel 環境），降級到純文字搜尋
+    return null;
   }
-  throw new Error('Ollama 返回格式異常');
 }
 
 // --- 材料搜尋三層 pipeline ---
@@ -264,30 +274,34 @@ export async function POST(request: NextRequest) {
     // P1: 分詞
     const tokens = tokenizeQuery(query);
 
-    // 產生嵌入（用於 documents 向量搜尋 + materials 向量搜尋）
+    // 產生嵌入（Ollama 不可用時回傳 null，跳過向量層）
     const embedding = await generateEmbedding(query);
-    const embeddingStr = '[' + embedding.join(',') + ']';
+    const embeddingStr = embedding ? '[' + embedding.join(',') + ']' : '';
 
-    // 四層 materials 搜尋並行
+    // 四層 materials 搜尋並行（無 embedding 時跳過向量層）
     const [layer1, layer2, layer3, layer4] = await Promise.all([
       searchByILIKE(query),
       searchBySynonyms(expandedTerms),
       searchByTokens(tokens),
-      searchByMaterialVector(embeddingStr, 0.65)
+      embeddingStr
+        ? searchByMaterialVector(embeddingStr, 0.65)
+        : Promise.resolve([])
     ]);
 
     // 合併結果
     const mergedMaterials = mergeAndRank([layer1, layer2, layer3, layer4]);
 
-    // documents 向量搜尋
-    const data = await sql`
-      SELECT id, content, metadata,
-             1 - (embedding <=> ${embeddingStr}::vector) AS similarity
-      FROM documents
-      WHERE 1 - (embedding <=> ${embeddingStr}::vector) > ${match_threshold}
-      ORDER BY embedding <=> ${embeddingStr}::vector
-      LIMIT ${match_count}
-    `;
+    // documents 向量搜尋（無 embedding 時用空陣列）
+    const data = embeddingStr
+      ? await sql`
+          SELECT id, content, metadata,
+                 1 - (embedding <=> ${embeddingStr}::vector) AS similarity
+          FROM documents
+          WHERE 1 - (embedding <=> ${embeddingStr}::vector) > ${match_threshold}
+          ORDER BY embedding <=> ${embeddingStr}::vector
+          LIMIT ${match_count}
+        `
+      : [];
 
     // 格式化 documents 結果
     const contentTypeToCategory: Record<string, string> = {
@@ -353,7 +367,8 @@ export async function POST(request: NextRequest) {
       data: filteredData,
       materials: formattedMaterials,
       query,
-      embedding_dimension: embedding.length,
+      embedding_dimension: embedding?.length ?? 0,
+      embedding_available: !!embedding,
       search_meta: {
         synonym_expanded: expandedTerms.length,
         tokens: tokens,

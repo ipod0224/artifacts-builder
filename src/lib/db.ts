@@ -17,7 +17,13 @@ function getSQL(): Sql {
   if (!url) {
     throw new Error('DATABASE_URL environment variable is required');
   }
-  _sql = postgres(url, { max: 10, idle_timeout: 20, connect_timeout: 10 });
+  const isNeon = url.includes('neon.tech');
+  _sql = postgres(url, {
+    max: isNeon ? 5 : 10,
+    idle_timeout: 20,
+    connect_timeout: isNeon ? 15 : 10,
+    ssl: isNeon ? 'require' : undefined
+  });
   return _sql;
 }
 
