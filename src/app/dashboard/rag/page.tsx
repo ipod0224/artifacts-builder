@@ -41,6 +41,8 @@ import {
   IconCheck,
   IconX
 } from '@tabler/icons-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 interface SearchResult {
   id: string;
   content: string;
@@ -51,6 +53,54 @@ interface SearchResult {
   category?: string;
 }
 
+type ConfidenceLevel = 'high' | 'medium' | 'low';
+
+function getConfidenceLevel(similarity: number): ConfidenceLevel {
+  if (similarity >= 0.75) return 'high';
+  if (similarity >= 0.6) return 'medium';
+  return 'low';
+}
+
+const confidenceConfig: Record<
+  ConfidenceLevel,
+  { color: string; label: string }
+> = {
+  high: {
+    color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+    label: '高度相關'
+  },
+  medium: {
+    color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+    label: '中度相關'
+  },
+  low: {
+    color: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
+    label: '低度相關'
+  }
+};
+
+function ConfidenceBadge({ score }: { score: number }) {
+  const level = getConfidenceLevel(score);
+  const { color, label } = confidenceConfig[level];
+  const pct = (score * 100).toFixed(0);
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${color}`}
+    >
+      <span
+        className={`inline-block size-2 rounded-full ${
+          level === 'high'
+            ? 'bg-green-500'
+            : level === 'medium'
+              ? 'bg-blue-500'
+              : 'bg-amber-500'
+        }`}
+      />
+      {pct}% {label}
+    </span>
+  );
+}
+
 interface Material {
   id: string;
   name: string;
@@ -59,13 +109,72 @@ interface Material {
   spec?: string;
 }
 
+interface MaterialMatch {
+  code: string;
+  name: string;
+  spec: string;
+  unit: string;
+  unit_price: number;
+  category?: string;
+}
+
+type AnswerSource = 'rule' | 'rule+materials' | 'llm' | null;
+
+const sourceConfig: Record<string, { color: string; label: string }> = {
+  rule: {
+    color: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+    label: '規則匹配'
+  },
+  'rule+materials': {
+    color: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+    label: '規則+材料'
+  },
+  llm: {
+    color:
+      'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+    label: 'AI 合成'
+  }
+};
+
+function SourceBadge({
+  source,
+  confidence
+}: {
+  source: AnswerSource;
+  confidence: number;
+}) {
+  if (!source) return null;
+  const { color, label } = sourceConfig[source];
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${color}`}
+    >
+      {label}
+      <span className='opacity-60'>({(confidence * 100).toFixed(0)}%)</span>
+    </span>
+  );
+}
+
 export default function RAGPage() {
   const [query, setQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [answer, setAnswer] = useState('');
+  const [answerSource, setAnswerSource] = useState<AnswerSource>(null);
+  const [answerConfidence, setAnswerConfidence] = useState(0);
+  const [matchedRule, setMatchedRule] = useState<{
+    ruleId: number;
+    type: string;
+    subtype: string | null;
+    score: number;
+  } | null>(null);
   const [materials, setMaterials] = useState<Material[]>([]);
-  const [stats, setStats] = useState({ documents: 0, materials: 0 });
+  const [stats, setStats] = useState({
+    documents: 0,
+    materials: 0,
+    qaRules: 0
+  });
+  const [materialMatches, setMaterialMatches] = useState<MaterialMatch[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -88,7 +197,8 @@ export default function RAGPage() {
         const result = await response.json();
         setStats({
           documents: result.stats.documents || 0,
-          materials: result.stats.materials || 0
+          materials: result.stats.materials || 0,
+          qaRules: result.stats.qaRules || 0
         });
         setMaterials(result.materials || []);
         setIsConnected(true);
@@ -101,24 +211,24 @@ export default function RAGPage() {
     loadData();
   }, []);
 
-  // 向量搜尋
+  // 對答搜尋（規則優先 + LLM fallback）
   const handleSearch = async () => {
     if (!query.trim()) return;
 
     setIsSearching(true);
     setError(null);
     setResults([]);
+    setMaterialMatches([]);
     setAnswer('');
+    setAnswerSource(null);
+    setAnswerConfidence(0);
+    setMatchedRule(null);
 
     try {
-      const response = await fetch('/api/rag/search', {
+      const response = await fetch('/api/rag/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query,
-          match_count: 5,
-          match_threshold: 0.0
-        })
+        body: JSON.stringify({ query })
       });
 
       const result = await response.json();
@@ -127,30 +237,21 @@ export default function RAGPage() {
         throw new Error(result.error || '搜尋失敗');
       }
 
-      if (result.data && result.data.length > 0) {
-        const formattedResults: SearchResult[] = result.data.map(
-          (item: any) => ({
-            id: item.id,
-            content: item.content,
-            source: item.source || '知識庫',
-            similarity: item.similarity || 0,
-            chunk_idx: item.chunk_idx,
-            doc_type: item.doc_type,
-            category: item.category
-          })
-        );
+      // 設定回答和來源
+      setAnswer(result.answer || '');
+      setAnswerSource(result.source || null);
+      setAnswerConfidence(result.confidence || 0);
+      setMatchedRule(result.matchedRule || null);
 
-        setResults(formattedResults);
+      // 設定材料結果
+      if (result.materials && result.materials.length > 0) {
+        setMaterialMatches(result.materials);
+      }
 
-        const topResult = formattedResults[0];
-        setAnswer(
-          `根據搜尋結果，${topResult.content}\n\n（來源：${topResult.source}${topResult.doc_type ? ` - ${topResult.doc_type}` : ''}，相似度 ${(topResult.similarity * 100).toFixed(0)}%）`
-        );
-      } else {
+      if (!result.answer) {
         setAnswer('未找到相關結果，請嘗試其他關鍵字。');
       }
     } catch (err) {
-      console.error('搜尋錯誤:', err);
       const message = err instanceof Error ? err.message : '搜尋失敗';
       setError(
         `搜尋失敗：${message}。請確認 Ollama 已啟動且 bge-m3 模型已安裝。`
@@ -205,13 +306,6 @@ export default function RAGPage() {
         )
       );
 
-      // 如果是第一筆結果，也更新 answer
-      if (results[0]?.id === editingItem.id) {
-        setAnswer(
-          `根據搜尋結果，${editContent}\n\n（來源：${editingItem.source}${editingItem.doc_type ? ` - ${editingItem.doc_type}` : ''}，相似度 ${(editingItem.similarity * 100).toFixed(0)}%）`
-        );
-      }
-
       setSaveMessage({
         type: 'success',
         text: '儲存成功！已重新生成 embedding 向量。'
@@ -261,7 +355,15 @@ export default function RAGPage() {
         )}
 
         {/* 統計卡片 */}
-        <div className='grid grid-cols-1 gap-4 md:grid-cols-4'>
+        <div className='grid grid-cols-1 gap-4 md:grid-cols-5'>
+          <Card>
+            <CardHeader className='pb-2'>
+              <CardDescription>對答規則</CardDescription>
+              <CardTitle className='text-2xl'>
+                {stats.qaRules.toLocaleString()}
+              </CardTitle>
+            </CardHeader>
+          </Card>
           <Card>
             <CardHeader className='pb-2'>
               <CardDescription>知識庫 Chunks</CardDescription>
@@ -324,23 +426,104 @@ export default function RAGPage() {
           </CardContent>
         </Card>
 
-        {/* 回答區 */}
-        {answer && (
-          <Card className='border-primary/50 bg-primary/5'>
+        {/* Materials 精確匹配結果（優先顯示） */}
+        {materialMatches.length > 0 && (
+          <Card className='border-green-200 dark:border-green-800'>
             <CardHeader>
-              <CardTitle className='flex items-center gap-2 text-lg'>
-                <IconBolt className='text-primary size-5' />
-                搜尋結果
+              <CardTitle className='flex items-center gap-2'>
+                <IconDatabase className='size-5 text-green-600' />
+                材料匹配結果
               </CardTitle>
+              <CardDescription>
+                從材料資料庫精確匹配到 {materialMatches.length} 筆資料
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className='text-base leading-relaxed whitespace-pre-wrap'>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>材料名稱</TableHead>
+                    <TableHead>規格</TableHead>
+                    <TableHead>單位</TableHead>
+                    <TableHead className='text-right'>單價</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {materialMatches.map((m) => (
+                    <TableRow key={m.code}>
+                      <TableCell className='font-medium'>{m.name}</TableCell>
+                      <TableCell>{m.spec}</TableCell>
+                      <TableCell>{m.unit}</TableCell>
+                      <TableCell className='text-right'>
+                        {m.unit_price != null ? `$${m.unit_price}` : '-'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 回答區 */}
+        {answer && (
+          <Card
+            className={
+              answerSource === 'llm'
+                ? 'border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-950/20'
+                : 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/20'
+            }
+          >
+            <CardHeader>
+              <CardTitle className='flex items-center gap-2 text-lg'>
+                <IconBolt
+                  className={
+                    answerSource === 'llm'
+                      ? 'size-5 text-purple-600'
+                      : 'size-5 text-green-600'
+                  }
+                />
+                {answerSource === 'llm' ? 'AI 合成回答' : '規則匹配回答'}
+                <SourceBadge
+                  source={answerSource}
+                  confidence={answerConfidence}
+                />
+              </CardTitle>
+              {matchedRule && (
+                <CardDescription>
+                  Rule #{matchedRule.ruleId} [{matchedRule.type}
+                  {matchedRule.subtype ? `/${matchedRule.subtype}` : ''}]
+                </CardDescription>
+              )}
+            </CardHeader>
+            <CardContent className='prose prose-sm dark:prose-invert max-w-none'>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {answer}
-              </p>
+              </ReactMarkdown>
             </CardContent>
             <CardFooter className='text-muted-foreground text-sm'>
-              基於 {results.length} 個相關來源
+              {answerSource === 'llm'
+                ? `AI 合成 | ${materialMatches.length} 筆材料 + ${results.length} 個知識庫來源`
+                : `規則直接匹配 | 延遲 ~${matchedRule ? Math.round(matchedRule.score * 100) : 0}ms`}
             </CardFooter>
+          </Card>
+        )}
+
+        {/* 低信心度警告 */}
+        {results.length > 0 && results[0].similarity < 0.55 && (
+          <Card className='border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20'>
+            <CardContent className='flex items-start gap-3 pt-4'>
+              <IconAlertCircle className='mt-0.5 size-5 text-amber-600' />
+              <div>
+                <p className='font-medium text-amber-800 dark:text-amber-200'>
+                  搜尋結果相關度較低
+                </p>
+                <p className='mt-1 text-sm text-amber-700 dark:text-amber-300'>
+                  未找到高度匹配的結果。建議嘗試更具體的材料名稱或規格描述（如「PVC
+                  IV 2.0mm²」）。
+                </p>
+              </div>
+            </CardContent>
           </Card>
         )}
 
@@ -369,15 +552,14 @@ export default function RAGPage() {
                         {result.doc_type && (
                           <Badge variant='outline'>{result.doc_type}</Badge>
                         )}
+                        {result.category && (
+                          <Badge variant='outline' className='text-xs'>
+                            {result.category}
+                          </Badge>
+                        )}
                       </div>
                       <div className='flex items-center gap-2'>
-                        <Badge
-                          variant={
-                            result.similarity > 0.7 ? 'default' : 'secondary'
-                          }
-                        >
-                          相似度 {(result.similarity * 100).toFixed(0)}%
-                        </Badge>
+                        <ConfidenceBadge score={result.similarity} />
                         <Button
                           variant='ghost'
                           size='sm'
@@ -388,7 +570,7 @@ export default function RAGPage() {
                         </Button>
                       </div>
                     </div>
-                    <p className='text-sm whitespace-pre-wrap'>
+                    <p className='text-muted-foreground line-clamp-3 text-sm whitespace-pre-wrap'>
                       {result.content}
                     </p>
                   </div>
