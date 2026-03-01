@@ -255,9 +255,7 @@ export default function RAGPage() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : '搜尋失敗';
-      setError(
-        `搜尋失敗：${message}。請確認 Ollama 已啟動且 bge-m3 模型已安裝。`
-      );
+      setError(`搜尋失敗：${message}`);
     } finally {
       setIsSearching(false);
     }

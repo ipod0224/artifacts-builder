@@ -12,7 +12,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { matchRules, renderAnswer } from '@/lib/qa-rules';
 
-const API_BASE = process.env.RAG_API_BASE || 'http://localhost:3001';
+// Vercel 上沒有 localhost:3001，用 request origin 動態解析
+function getApiBase(request: NextRequest): string {
+  return process.env.RAG_API_BASE || request.nextUrl.origin;
+}
 const MAX_QUERY_LENGTH = 500;
 
 interface AnswerResponse {
@@ -96,7 +99,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: 未命中 → LLM fallback
-    const searchRes = await fetch(`${API_BASE}/api/rag/search`, {
+    const searchRes = await fetch(`${getApiBase(request)}/api/rag/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -114,11 +117,14 @@ export async function POST(request: NextRequest) {
     const materials = searchData.materials || [];
     const chunks = searchData.data || [];
 
-    const synthesizeRes = await fetch(`${API_BASE}/api/rag/synthesize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: trimmedQuery, materials, chunks })
-    });
+    const synthesizeRes = await fetch(
+      `${getApiBase(request)}/api/rag/synthesize`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: trimmedQuery, materials, chunks })
+      }
+    );
 
     if (!synthesizeRes.ok) {
       throw new Error(`synthesize API failed: HTTP ${synthesizeRes.status}`);
