@@ -6,7 +6,9 @@ const isApiRoute = (req: NextRequest) =>
 
 const isLocalOnlyRoute = (req: NextRequest) =>
   req.nextUrl.pathname.startsWith('/dashboard/rag') ||
-  req.nextUrl.pathname.startsWith('/dashboard/prices');
+  req.nextUrl.pathname.startsWith('/dashboard/prices') ||
+  req.nextUrl.pathname.startsWith('/dashboard/commodities') ||
+  req.nextUrl.pathname.startsWith('/dashboard/quotes');
 
 const hasClerkKeys = Boolean(
   process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY
@@ -41,7 +43,8 @@ const PROXY_API_PATHS = [
   '/api/prices',
   '/api/rag/search',
   '/api/rag/stats',
-  '/api/rag/documents'
+  '/api/rag/documents',
+  '/api/commodities'
 ];
 
 // Write endpoints that should only work locally

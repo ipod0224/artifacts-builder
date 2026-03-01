@@ -58,6 +58,22 @@ export const navItems: NavItem[] = [
     items: []
   },
   {
+    title: '原物料指數',
+    url: '/dashboard/commodities',
+    icon: 'commodity',
+    isActive: false,
+    shortcut: ['c', 'm'],
+    items: []
+  },
+  {
+    title: '語錄',
+    url: '/dashboard/quotes',
+    icon: 'quote',
+    isActive: false,
+    shortcut: ['q', 't'],
+    items: []
+  },
+  {
     title: 'Workspaces',
     url: '/dashboard/workspaces',
     icon: 'workspace',
