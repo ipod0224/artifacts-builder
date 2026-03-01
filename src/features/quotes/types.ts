@@ -18,6 +18,7 @@ export interface BookInfo {
   titleZh: string;
   author: string;
   description: string;
+  category: string;
 }
 
 export interface QuoteData {
