@@ -35,7 +35,7 @@ export function QuoteCard({ quote }: { quote: Quote }) {
               {mealInfo.label}
             </Badge>
           )}
-          {quote.category === 'naval' && quote.theme && (
+          {quote.category === 'book' && quote.theme && (
             <Badge
               variant='outline'
               className='bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300'

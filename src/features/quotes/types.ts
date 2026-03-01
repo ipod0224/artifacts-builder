@@ -7,12 +7,22 @@ export interface Quote {
   translation: string;
   source: string;
   commentary: string;
-  category: 'daily' | 'naval';
+  category: 'daily' | 'book';
   theme: string | null;
+  bookKey: string | null;
+}
+
+export interface BookInfo {
+  key: string;
+  title: string;
+  titleZh: string;
+  author: string;
+  description: string;
 }
 
 export interface QuoteData {
   extractedAt: string;
   count: number;
+  books: BookInfo[];
   quotes: Quote[];
 }

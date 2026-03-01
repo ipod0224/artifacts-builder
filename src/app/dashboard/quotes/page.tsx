@@ -39,11 +39,11 @@ export default function QuotesPage() {
       <div>
         <h2 className='text-xl font-bold tracking-tight sm:text-2xl'>語錄</h2>
         <p className='text-muted-foreground text-[13px] sm:text-sm'>
-          每日三餐經典 + Naval 金句 — 共 {data.count} 則
+          每日三餐經典 + 書籍金句 — 共 {data.count} 則
         </p>
       </div>
 
-      <QuoteTimeline quotes={data.quotes} />
+      <QuoteTimeline quotes={data.quotes} books={data.books} />
     </div>
   );
 }
