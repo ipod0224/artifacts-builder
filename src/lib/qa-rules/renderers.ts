@@ -84,10 +84,47 @@ function renderEstimation(row: QaRuleRow): string {
   const rule = row.rule as unknown as EstimationRule;
   const parts: string[] = [];
 
+  // 施工報價模式：work + price + includes
+  if (rule.work && rule.price) {
+    const priceDisplay = rule.price.startsWith('$')
+      ? rule.price
+      : `$${rule.price}`;
+    parts.push(`**${rule.work}：${priceDisplay}**`);
+    if (rule.includes) parts.push(`含：${rule.includes}`);
+    return parts.join('\n');
+  }
+
   if (rule.method) parts.push(`計價方式：${rule.method}`);
   if (rule.formula) parts.push(`公式：${rule.formula}`);
   if (rule.unit_price_range) parts.push(`單價範圍：${rule.unit_price_range}`);
   if (rule.ping) parts.push(`坪數：${rule.ping} 坪`);
+
+  // 項目明細模式：items { 燈具: 6, 開關: 7 } + estimate
+  if (
+    rule.items &&
+    typeof rule.items === 'object' &&
+    !Array.isArray(rule.items)
+  ) {
+    const entries = Object.entries(rule.items);
+    if (entries.length > 0) {
+      parts.push('項目明細：');
+      for (const [name, qty] of entries) {
+        parts.push(`- ${name} × ${qty}`);
+      }
+    }
+  }
+
+  // 單價×數量模式：unit_price + count + item
+  if (rule.unit_price !== undefined && rule.count !== undefined) {
+    const total = Math.round(rule.unit_price * rule.count);
+    const itemName = rule.item || '項目';
+    parts.push(
+      `${itemName} × ${rule.count}，單價 $${rule.unit_price.toLocaleString()}，合計 $${total.toLocaleString()}`
+    );
+  } else if (rule.item && rule.unit_price !== undefined) {
+    parts.push(`${rule.item}：$${rule.unit_price.toLocaleString()}/個`);
+  }
+
   if (rule.estimate) parts.push(`**預估費用：${rule.estimate}**`);
   if (rule.panel) parts.push(`配電箱：${rule.panel}`);
 
@@ -194,7 +231,9 @@ function selectRenderer(row: QaRuleRow): (row: QaRuleRow) => string {
   if (
     'estimate' in rule ||
     'formula' in rule ||
-    ('min' in rule && 'max' in rule)
+    ('min' in rule && 'max' in rule) ||
+    'unit_price' in rule ||
+    ('work' in rule && 'price' in rule)
   )
     return renderEstimation;
   if ('gauge' in rule || 'amp' in rule || 'law' in rule || 'standard' in rule)

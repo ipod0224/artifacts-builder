@@ -81,7 +81,7 @@ function selectRenderer(row) {
   const rule = row.rule;
   if ('template' in rule) return 'renderDirectAnswer';
   if ('steps' in rule || 'causes' in rule || 'methods' in rule) return 'renderStepsProcedure';
-  if ('estimate' in rule || 'formula' in rule || ('min' in rule && 'max' in rule)) return 'renderEstimation';
+  if ('estimate' in rule || 'formula' in rule || ('min' in rule && 'max' in rule) || 'unit_price' in rule || ('work' in rule && 'price' in rule)) return 'renderEstimation';
   if ('gauge' in rule || 'amp' in rule || 'law' in rule || 'standard' in rule) return 'renderRegulation';
   if ('materials' in rule || 'scene' in rule || 'room' in rule || 'wire' in rule) return 'renderMaterialList';
   if ('answer' in rule || 'mechanism' in rule || 'trend' in rule) return 'renderDirectAnswer';
@@ -135,8 +135,36 @@ function renderMaterialList(row) {
 function renderEstimation(row) {
   const rule = row.rule;
   const parts = [];
-  if (rule.estimate) parts.push(`**預估費用：${rule.estimate}**`);
+
+  if (rule.work && rule.price) {
+    const priceDisplay = rule.price.startsWith('$') ? rule.price : `$${rule.price}`;
+    parts.push(`**${rule.work}：${priceDisplay}**`);
+    if (rule.includes) parts.push(`含：${rule.includes}`);
+    return parts.join('\n');
+  }
+
+  if (rule.formula) parts.push(`公式：${rule.formula}`);
   if (rule.ping) parts.push(`坪數：${rule.ping} 坪`);
+
+  if (rule.items && typeof rule.items === 'object' && !Array.isArray(rule.items)) {
+    const entries = Object.entries(rule.items);
+    if (entries.length > 0) {
+      parts.push('項目明細：');
+      for (const [name, qty] of entries) {
+        parts.push(`- ${name} × ${qty}`);
+      }
+    }
+  }
+
+  if (rule.unit_price !== undefined && rule.count !== undefined) {
+    const total = Math.round(rule.unit_price * rule.count);
+    const itemName = rule.item || '項目';
+    parts.push(`${itemName} × ${rule.count}，單價 $${rule.unit_price.toLocaleString()}，合計 $${total.toLocaleString()}`);
+  } else if (rule.item && rule.unit_price !== undefined) {
+    parts.push(`${rule.item}：$${rule.unit_price.toLocaleString()}/個`);
+  }
+
+  if (rule.estimate) parts.push(`**預估費用：${rule.estimate}**`);
   if (rule.min !== undefined && rule.max !== undefined) {
     parts.push(`範圍：${rule.min.toLocaleString()} ~ ${rule.max.toLocaleString()} 元`);
   }
@@ -353,6 +381,14 @@ describe('selectRenderer', () => {
     assert.equal(selectRenderer({ rule: { min: 1000, max: 5000, ping: 10 } }), 'renderEstimation');
   });
 
+  it('should route unit_price to renderEstimation', () => {
+    assert.equal(selectRenderer({ rule: { unit_price: 1200, count: 5 } }), 'renderEstimation');
+  });
+
+  it('should route work+price to renderEstimation', () => {
+    assert.equal(selectRenderer({ rule: { work: '換開關', price: '500~800' } }), 'renderEstimation');
+  });
+
   it('should route law to renderRegulation', () => {
     assert.equal(selectRenderer({ rule: { law: '用戶用電設備裝置規則' } }), 'renderRegulation');
   });
@@ -500,5 +536,45 @@ describe('renderAnswer quality gate', () => {
     // renderEstimation: "坪數：20 坪\n範圍：50,000 ~ 80,000 元" = 28 chars, >= 25
     const result = renderAnswer({ rule: { min: 50000, max: 80000, ping: 20 } }, 0.75);
     assert.notEqual(result, null);
+  });
+
+  it('should accept unit_price+count estimation', () => {
+    const result = renderAnswer({
+      rule: { item: '接地棒 1.5m', unit_price: 280, count: 3 },
+    }, 0.8);
+    assert.notEqual(result, null);
+    assert.ok(result.answer.includes('接地棒'));
+    assert.ok(result.answer.includes('280'));
+    assert.ok(result.answer.includes('840'));
+  });
+
+  it('should accept items+estimate with breakdown', () => {
+    const result = renderAnswer({
+      rule: {
+        items: { '燈具': 6, '開關': 7, '110V插座': 13 },
+        estimate: 27800,
+      },
+    }, 0.75);
+    assert.notEqual(result, null);
+    assert.ok(result.answer.includes('燈具'));
+    assert.ok(result.answer.includes('27800'));
+  });
+
+  it('should accept work+price service quote', () => {
+    const result = renderAnswer({
+      rule: { work: '換一顆NFB', price: '300~500', includes: '工資+NFB' },
+    }, 0.7);
+    assert.notEqual(result, null);
+    assert.ok(result.answer.includes('換一顆NFB'));
+    assert.ok(result.answer.includes('300~500'));
+    assert.ok(result.answer.includes('工資'));
+  });
+
+  it('should reject single unit_price without count (too short)', () => {
+    // "冷氣專用插座：$250/個" = 14 chars, < 25 threshold
+    const result = renderAnswer({
+      rule: { item: '冷氣專用插座', unit_price: 250 },
+    }, 0.6);
+    assert.equal(result, null);
   });
 });

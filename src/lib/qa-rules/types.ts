@@ -84,10 +84,18 @@ export interface EstimationRule {
   formula: string;
   unit_price_range: string;
   ping?: number;
-  estimate: string;
+  estimate: string | number;
   panel?: string;
   min?: number;
   max?: number;
+  // 擴充欄位：單價×數量、項目明細、施工報價
+  item?: string;
+  unit_price?: number;
+  count?: number;
+  items?: Record<string, number>;
+  work?: string;
+  price?: string;
+  includes?: string;
 }
 
 export interface RegulationRule {
