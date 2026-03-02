@@ -623,14 +623,58 @@ export default function RAGPage() {
               )}
             </CardHeader>
             <CardContent className='prose prose-sm dark:prose-invert max-w-none'>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  table: ({ children }) => (
+                    <div className='not-prose my-3 overflow-x-auto rounded-lg border'>
+                      <table className='w-full text-sm'>{children}</table>
+                    </div>
+                  ),
+                  thead: ({ children }) => (
+                    <thead className='bg-muted/50 border-b'>{children}</thead>
+                  ),
+                  th: ({ children, style }) => (
+                    <th
+                      className='px-3 py-2 text-left text-xs font-medium tracking-wider'
+                      style={style}
+                    >
+                      {children}
+                    </th>
+                  ),
+                  td: ({ children, style }) => {
+                    const isNumeric =
+                      typeof children === 'string'
+                        ? /^\$[\d,]+$/.test(children.trim())
+                        : Array.isArray(children) &&
+                          children.some(
+                            (c) =>
+                              typeof c === 'string' &&
+                              /^\$[\d,]+$/.test(c.trim())
+                          );
+                    return (
+                      <td
+                        className={`px-3 py-2 ${isNumeric ? 'font-mono font-semibold' : ''}`}
+                        style={style}
+                      >
+                        {children}
+                      </td>
+                    );
+                  },
+                  tr: ({ children }) => (
+                    <tr className='even:bg-muted/30 border-b last:border-0'>
+                      {children}
+                    </tr>
+                  )
+                }}
+              >
                 {answer}
               </ReactMarkdown>
             </CardContent>
-            <CardFooter className='text-muted-foreground text-sm'>
+            <CardFooter className='text-muted-foreground border-t pt-3 text-xs'>
               {answerSource === 'llm'
                 ? `AI 合成 | ${materialMatches.length} 筆材料 + ${results.length} 個知識庫來源`
-                : `規則直接匹配 | 延遲 ~${matchedRule ? Math.round(matchedRule.score * 100) : 0}ms`}
+                : `規則直接匹配 | 分數 ${matchedRule ? (matchedRule.score * 100).toFixed(0) : 0}%`}
             </CardFooter>
           </Card>
         )}

@@ -107,30 +107,56 @@ function synthesizeStructured(input: SynthesizeInput): string {
   const parts: string[] = [];
 
   if (input.materials.length > 0) {
-    const names = input.materials.map((m) => {
+    // 摘要句
+    const priced = input.materials.filter((m) => m.unit_price != null);
+    const prices = priced.map((m) => m.unit_price!);
+    const minPrice = Math.min(...prices);
+    const maxPrice = Math.max(...prices);
+    const specs = Array.from(
+      new Set(input.materials.map((m) => m.spec).filter(Boolean))
+    );
+
+    if (priced.length > 0 && minPrice === maxPrice) {
+      parts.push(
+        `找到 **${input.materials.length}** 筆相關材料，單價 **$${minPrice.toLocaleString()}**。`
+      );
+    } else if (priced.length > 0) {
+      parts.push(
+        `找到 **${input.materials.length}** 筆相關材料，單價區間 **$${minPrice.toLocaleString()} ~ $${maxPrice.toLocaleString()}**。`
+      );
+    } else {
+      parts.push(`找到 **${input.materials.length}** 筆相關材料。`);
+    }
+
+    if (specs.length > 0 && specs.length <= 5) {
+      parts.push(`涵蓋規格：${specs.join('、')}。`);
+    }
+
+    // 結構化表格
+    parts.push('');
+    parts.push('| 材料名稱 | 規格 | 單位 | 單價 |');
+    parts.push('|:---------|:-----|:----:|-----:|');
+    for (const m of input.materials) {
       const price =
-        m.unit_price != null
-          ? `$${m.unit_price.toLocaleString()}/${m.unit}`
-          : '價格待查';
-      return `**${m.name}**（${m.spec}）${price}`;
-    });
-    parts.push(`找到 ${input.materials.length} 筆材料：${names.join('、')}`);
+        m.unit_price != null ? `$${m.unit_price.toLocaleString()}` : '-';
+      parts.push(`| ${m.name} | ${m.spec || '-'} | ${m.unit} | ${price} |`);
+    }
   }
 
   if (input.chunks.length > 0) {
     const relevant = input.chunks.filter((c) => c.similarity >= 0.6);
     if (relevant.length > 0) {
       parts.push('');
-      parts.push('相關知識庫參考：');
+      parts.push('**相關知識庫參考：**');
       relevant.forEach((c, i) => {
         parts.push(
           `- [${i + 1}] ${c.source}（${(c.similarity * 100).toFixed(0)}%）`
         );
       });
-    } else {
-      parts.push('');
-      parts.push('知識庫中未找到高度相關的補充資料。');
     }
+  } else if (input.materials.length > 0) {
+    parts.push('');
+    parts.push('*知識庫中未找到高度相關的補充資料，以上價格僅供參考。*');
   }
 
   if (input.materials.length === 0 && input.chunks.length === 0) {
