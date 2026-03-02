@@ -65,6 +65,8 @@ export interface SourceTypeStat {
  * - pvc-pipe:       JC-149 規則 3 (pipeType) + JC-37a
  * - rsg-conduit:    JC-37a (nominalSize)
  * - stainlesspipe:  JC-158 canonical (grade/size_mm/schedule)
+ * - pvc-fitting:    萬蕙昇 specs (fittingType/spec)
+ * - stainlessfitting: 萬蕙昇 specs (fittingType/spec)
  *
  * 注意：
  * - nfb/leakagebreaker 的 ampere 存為 JSON 陣列（一筆=一框架），
@@ -133,7 +135,19 @@ export const SPEC_DIMENSIONS: Partial<Record<PriceCategory, SpecDimension[]>> =
     'rsg-conduit': [{ key: 'nominalSize', label: '管徑' }],
     // JC-158 canonical: grade(304/316) → size(mm) → thickness
     // TCRI/PCIC 用 JIS 標稱 mm、萬蕙昇 用不同 mm，CTE 統一轉英制
-    stainlesspipe: [{ key: 'size', label: '管徑' }]
+    stainlesspipe: [{ key: 'size', label: '管徑' }],
+    // 萬蕙昇 specs: fittingType (5 種) → spec (管徑+角度)
+    // 515 筆單通路，fittingType 為粗篩維度
+    'pvc-fitting': [
+      { key: 'fittingType', label: '另件種類' },
+      { key: 'spec', label: '規格' }
+    ],
+    // 萬蕙昇 specs: fittingType (5 種) → spec (JIS mm 管徑)
+    // 142 筆單通路
+    stainlessfitting: [
+      { key: 'fittingType', label: '另件種類' },
+      { key: 'spec', label: '規格' }
+    ]
   };
 
 /** Short labels for compact display (e.g., coverage matrix) */
