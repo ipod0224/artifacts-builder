@@ -16,6 +16,7 @@ export interface ProductRow {
   series: string | null;
   match_type: 'exact' | 'unknown_af';
   specs: { model?: string; spec?: string; name?: string };
+  labor_cost_per_m?: number | null;
 }
 
 /** Max unknown_af rows shown before "show more" */
@@ -27,6 +28,21 @@ function formatSource(source: string, brand: string | null): string {
   return `${source}·${brand}`;
 }
 
+/** Category-aware label for the "unknown" section */
+function getUnknownLabel(category: PriceCategory): string {
+  switch (category) {
+    case 'nfb':
+    case 'leakagebreaker':
+      return 'AF 未標示';
+    case 'transformer':
+      return '型式未標示';
+    case 'cable':
+      return '種類未標示';
+    default:
+      return '未標示';
+  }
+}
+
 export function ProductTable({
   products,
   category
@@ -34,14 +50,21 @@ export function ProductTable({
   products: ProductRow[];
   category: PriceCategory;
 }) {
-  const exactProducts = products.filter((p) => p.match_type === 'exact');
-  const unknownAfProducts = products.filter(
-    (p) => p.match_type === 'unknown_af'
-  );
+  const rawExact = products.filter((p) => p.match_type === 'exact');
+  const rawUnknown = products.filter((p) => p.match_type === 'unknown_af');
+
+  // If no exact products exist, promote unknown to regular display
+  // (unknown section only meaningful when there's something to compare against)
+  const exactProducts = rawExact.length > 0 ? rawExact : rawUnknown;
+  const unknownAfProducts = rawExact.length > 0 ? rawUnknown : [];
   const minPrice = Math.min(...products.map((p) => p.sell_price));
   const showSeries =
     (category === 'nfb' || category === 'leakagebreaker') &&
     products.some((p) => p.series);
+  const showLabor =
+    category === 'cable' && products.some((p) => p.labor_cost_per_m != null);
+  const colCount = 5 + (showSeries ? 1 : 0) + (showLabor ? 1 : 0);
+  const unknownLabel = getUnknownLabel(category);
 
   const [showAllUnknown, setShowAllUnknown] = useState(false);
   const visibleUnknown = showAllUnknown
@@ -62,6 +85,9 @@ export function ProductTable({
             <th className='px-2 py-2 text-right font-medium'>售價</th>
             <th className='px-2 py-2 text-right font-medium'>牌價</th>
             <th className='px-2 py-2 text-right font-medium'>折數</th>
+            {showLabor && (
+              <th className='px-2 py-2 text-right font-medium'>工資/M</th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -71,16 +97,17 @@ export function ProductTable({
               p={p}
               minPrice={minPrice}
               showSeries={showSeries}
+              showLabor={showLabor}
             />
           ))}
           {unknownAfProducts.length > 0 && (
             <>
               <tr>
                 <td
-                  colSpan={showSeries ? 6 : 5}
+                  colSpan={colCount}
                   className='text-muted-foreground border-t-2 border-dashed px-2 py-1.5 text-xs font-medium'
                 >
-                  AF 未標示（{unknownAfProducts.length} 筆）
+                  {unknownLabel}（{unknownAfProducts.length} 筆）
                 </td>
               </tr>
               {visibleUnknown.map((p, idx) => (
@@ -89,12 +116,13 @@ export function ProductTable({
                   p={p}
                   minPrice={minPrice}
                   showSeries={showSeries}
+                  showLabor={showLabor}
                   dimmed
                 />
               ))}
               {hiddenCount > 0 && !showAllUnknown && (
                 <tr>
-                  <td colSpan={showSeries ? 6 : 5} className='px-2 py-1.5'>
+                  <td colSpan={colCount} className='px-2 py-1.5'>
                     <Button
                       variant='ghost'
                       size='sm'
@@ -118,11 +146,13 @@ function Row({
   p,
   minPrice,
   showSeries,
+  showLabor = false,
   dimmed = false
 }: {
   p: ProductRow;
   minPrice: number;
   showSeries: boolean;
+  showLabor?: boolean;
   dimmed?: boolean;
 }) {
   return (
@@ -155,6 +185,13 @@ function Row({
       <td className='text-muted-foreground px-2 py-2 text-right font-mono tabular-nums'>
         {p.discount ? `${(Number(p.discount) * 100).toFixed(1)}%` : ''}
       </td>
+      {showLabor && (
+        <td className='text-muted-foreground px-2 py-2 text-right font-mono tabular-nums'>
+          {p.labor_cost_per_m != null
+            ? `$${p.labor_cost_per_m.toLocaleString()}`
+            : ''}
+        </td>
+      )}
     </tr>
   );
 }

@@ -11,10 +11,12 @@ interface Summary {
 
 export function ResultSummary({
   summary,
-  hasUnknownAf
+  hasUnknownAf,
+  unknownLabel = '部分規格'
 }: {
   summary: Summary;
   hasUnknownAf: boolean;
+  unknownLabel?: string;
 }) {
   return (
     <div className='mb-3 space-y-1'>
@@ -33,7 +35,7 @@ export function ResultSummary({
       </div>
       {hasUnknownAf && (
         <p className='text-muted-foreground text-xs'>
-          ※ 部分通路未標示框架(AF)，歸入「AF 未標示」區段
+          ※ 部分通路{unknownLabel}未標示，歸入下方獨立區段
         </p>
       )}
     </div>

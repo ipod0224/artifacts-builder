@@ -123,6 +123,16 @@ export default function ConfiguratorPage() {
   const filterCount = Object.keys(filters).length;
   const hasUnknownAf = products.some((p) => p.match_type === 'unknown_af');
 
+  /** Category-aware label for the unknown section footnote */
+  const unknownLabel =
+    category === 'nfb' || category === 'leakagebreaker'
+      ? '框架(AF)'
+      : category === 'transformer'
+        ? '型式'
+        : category === 'cable'
+          ? '種類'
+          : '部分規格';
+
   return (
     <div className='space-y-4 p-4 sm:space-y-6 sm:p-6'>
       {/* Header */}
@@ -228,6 +238,7 @@ export default function ConfiguratorPage() {
                     <ResultSummary
                       summary={summary}
                       hasUnknownAf={hasUnknownAf}
+                      unknownLabel={unknownLabel}
                     />
                   )}
                   <ProductTable products={products} category={category} />

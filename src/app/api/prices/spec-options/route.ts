@@ -1,6 +1,7 @@
 import { sql } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { categorySchema, SPEC_DIMENSIONS } from '@/features/prices/constants';
+import { ENRICHED_CONFIGS, handleEnriched } from './enriched-handler';
 
 const MAX_FILTER_VALUE_LENGTH = 128;
 
@@ -125,9 +126,15 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Branch: NFB uses enriched CTE, others use specs @> containment
+    // Branch: NFB uses its own enriched CTE, other enriched categories
+    // use generic CTE handler, rest use specs @> containment
     if (category === 'nfb') {
       return handleNfb(category, dimensions, filters);
+    }
+
+    const enrichedConfig = ENRICHED_CONFIGS[category];
+    if (enrichedConfig) {
+      return handleEnriched(enrichedConfig, category, dimensions, filters);
     }
 
     return handleGeneric(category, dimensions, filters);
