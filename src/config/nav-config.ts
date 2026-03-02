@@ -55,7 +55,12 @@ export const navItems: NavItem[] = [
     icon: 'priceIntel',
     isActive: false,
     shortcut: ['p', 'r'],
-    items: []
+    items: [
+      {
+        title: '互動配置器',
+        url: '/dashboard/prices/configurator'
+      }
+    ]
   },
   {
     title: '原物料指數',
