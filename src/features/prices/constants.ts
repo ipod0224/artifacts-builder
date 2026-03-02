@@ -132,11 +132,8 @@ export const SPEC_DIMENSIONS: Partial<Record<PriceCategory, SpecDimension[]>> =
     // JC-37a: nominalSize
     'rsg-conduit': [{ key: 'nominalSize', label: '管徑' }],
     // JC-158 canonical: grade(304/316) → size(mm) → thickness
-    // DB 缺 grade/schedule (0/25), 只有 size(7) + thickness(7)
-    stainlesspipe: [
-      { key: 'size', label: '管徑(mm)' },
-      { key: 'thickness', label: '厚度' }
-    ]
+    // TCRI/PCIC 用 JIS 標稱 mm、萬蕙昇 用不同 mm，CTE 統一轉英制
+    stainlesspipe: [{ key: 'size', label: '管徑' }]
   };
 
 /** Short labels for compact display (e.g., coverage matrix) */

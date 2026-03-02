@@ -317,46 +317,59 @@ async function handleNfb(
   });
 }
 
-// ─── Generic handler (specs @> containment) ───────────────────────────────
+// ─── Generic handler (specs->>'key' = $val) ─────────────────────────────
+//
+// Uses specs->>'key' = $val instead of specs @> containment.
+// The ->> operator always returns text, so it correctly handles JSON numbers
+// (e.g., contactor rated_current_a stored as number 20, not string "20").
+// Filter keys come from SPEC_DIMENSIONS constants (not user input), safe to interpolate.
 
 async function handleGeneric(
   category: string,
   dimensions: SpecDimension[],
   filters: Record<string, string>
 ) {
-  // For each dimension, query DISTINCT values excluding that dimension's own filter
-  // IMPORTANT: must use sql.json() for JSONB containment — JSON.stringify + ::jsonb
-  // silently fails with postgres tagged template (parameterised as text, not jsonb)
+  // Defense-in-depth: only allow dimension keys from SPEC_DIMENSIONS constants
+  const allowedKeys = new Set(dimensions.map((d) => d.key));
+  for (const key of Object.keys(filters)) {
+    if (!allowedKeys.has(key)) {
+      return NextResponse.json(
+        { success: false, error: `Unknown filter key: ${key}` },
+        { status: 400 }
+      );
+    }
+  }
+
   const dimensionResults = await Promise.all(
     dimensions.map(async (dim) => {
       const { [dim.key]: _excluded, ...otherFilters } = filters;
-      const hasOtherFilters = Object.keys(otherFilters).length > 0;
+      const filterEntries = Object.entries(otherFilters);
 
-      const rows = hasOtherFilters
-        ? await sql`
-            SELECT DISTINCT specs->> ${dim.key} AS val
-            FROM prices
-            WHERE category = ${category}
-              AND sell_price > 0
-              AND specs @> ${sql.json(otherFilters)}
-              AND specs->> ${dim.key} IS NOT NULL
-              AND specs->> ${dim.key} != ''
-            ORDER BY val
-          `
-        : await sql`
-            SELECT DISTINCT specs->> ${dim.key} AS val
-            FROM prices
-            WHERE category = ${category}
-              AND sell_price > 0
-              AND specs->> ${dim.key} IS NOT NULL
-              AND specs->> ${dim.key} != ''
-            ORDER BY val
-          `;
+      // $1 = category, $2+ = filter values
+      const params: string[] = [category];
+      const whereParts: string[] = [];
+      for (const [key, val] of filterEntries) {
+        params.push(val);
+        whereParts.push(`specs->>'${key}' = $${params.length}`);
+      }
+      const filterClause =
+        whereParts.length > 0 ? `AND ${whereParts.join(' AND ')}` : '';
 
+      const query = `
+        SELECT DISTINCT specs->>'${dim.key}' AS val
+        FROM prices
+        WHERE category = $1
+          AND sell_price > 0
+          AND specs->>'${dim.key}' IS NOT NULL
+          AND specs->>'${dim.key}' != ''
+          ${filterClause}
+        ORDER BY val
+      `;
+      const rows = await sql.unsafe(query, params);
       return {
         key: dim.key,
         label: dim.label,
-        values: rows.map((r) => String(r.val)),
+        values: rows.map((r) => String((r as Record<string, unknown>).val)),
         selected: filters[dim.key] ?? null
       };
     })
@@ -368,7 +381,15 @@ async function handleGeneric(
   let summary: Summary | null = null;
 
   if (hasFilters) {
-    const rows = await sql`
+    const params: string[] = [category];
+    const whereParts: string[] = [];
+    for (const [key, val] of Object.entries(filters)) {
+      params.push(val);
+      whereParts.push(`specs->>'${key}' = $${params.length}`);
+    }
+    const filterClause = whereParts.join(' AND ');
+
+    const query = `
       SELECT source, brand,
         COALESCE(specs->>'model', specs->>'name') AS model,
         sell_price::int AS sell_price,
@@ -384,12 +405,13 @@ async function handleGeneric(
           'name',  specs->>'name'
         ) AS specs
       FROM prices
-      WHERE category = ${category}
+      WHERE category = $1
         AND sell_price > 0
-        AND specs @> ${sql.json(filters)}
+        AND ${filterClause}
       ORDER BY sell_price ASC
       LIMIT 200
     `;
+    const rows = await sql.unsafe(query, params);
     products = rows as unknown as ProductRow[];
 
     if (products.length > 0) {
