@@ -71,7 +71,7 @@ export interface SourceTypeStat {
  *   不適合按鈕篩選，需 D2 技術債（JC-156）解決後才加入
  * - ic_ka 存為巢狀 JSON {"220V":10,"380V":7.5}，同理暫不加入
  * - series 為製造商產品線（JC-47 型號對照），品牌特定非通用規格，
- *   保留供單品牌瀏覽但排在通用維度之後
+ *   已從篩選維度移除（會鎖死單一通路），改為結果表顯示欄位
  * - motor-starter/acb 資料不足（30/12 筆，僅單通路），暫不定義
  */
 export interface SpecDimension {
@@ -81,26 +81,25 @@ export interface SpecDimension {
 
 export const SPEC_DIMENSIONS: Partial<Record<PriceCategory, SpecDimension[]>> =
   {
-    // JC-47: poles → frame_af → (ampere 待 D2) → series(品牌產品線)
-    // DB 覆蓋: poles 429/739, frame_af 278/739 (朝立缺), series 429/739
+    // JC-47: poles → frame_af → rated_at
+    // DB 覆蓋: poles 739/739 (CTE 正則 100%), frame_af 689/739 (CTE 93.1%)
+    // rated_at: TCRI/PCIC name regex + 朝立/東元/三菱 ampere JSON 陣列展開
+    // series 移至結果表顯示（品牌專屬，放篩選會鎖死單一通路）
     nfb: [
       { key: 'poles', label: '極數' },
       { key: 'frame_af', label: '框架(AF)' },
-      { key: 'series', label: '產品線' }
+      { key: 'rated_at', label: '額定電流(AT)' }
     ],
-    // JC-47 + JC-158: poles → sensitivity_ma → frame_af → series
+    // JC-47 + JC-158: poles → sensitivity_ma → frame_af
+    // series 移至結果表顯示
     leakagebreaker: [
       { key: 'poles', label: '極數' },
       { key: 'sensitivity_ma', label: '感度(mA)' },
-      { key: 'frame_af', label: '框架(AF)' },
-      { key: 'series', label: '產品線' }
+      { key: 'frame_af', label: '框架(AF)' }
     ],
     // JC-146 + JC-158: rated_current_a 為 canonical 唯一有效維度
-    // series 保留供品牌瀏覽 (S-T/CN/CU)
-    contactor: [
-      { key: 'rated_current_a', label: '額定電流(A)' },
-      { key: 'series', label: '產品線' }
-    ],
+    // series 移至結果表顯示 (S-T/CN/CU)
+    contactor: [{ key: 'rated_current_a', label: '額定電流(A)' }],
     // JC-158 canonical + CNS 2655/679: type → cores → spec(mm²)
     cable: [
       { key: 'type', label: '種類' },

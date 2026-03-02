@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -18,22 +18,18 @@ import {
   SPEC_DIMENSIONS,
   type PriceCategory
 } from '@/features/prices/constants';
+import {
+  DimensionRow,
+  type DimensionOption
+} from './_components/dimension-row';
+import { ProductTable, type ProductRow } from './_components/product-table';
+import { ResultSummary } from './_components/result-summary';
 
-interface DimensionOption {
-  key: string;
-  label: string;
-  values: string[];
-  selected: string | null;
-}
-
-interface ProductRow {
-  source: string;
-  brand: string | null;
-  model: string | null;
-  sell_price: number;
-  list_price: number | null;
-  discount: number | null;
-  specs: { model?: string; spec?: string; name?: string };
+interface Summary {
+  sourceCount: number;
+  totalProducts: number;
+  lowestPrice: number;
+  priceRange: [number, number];
 }
 
 interface SpecOptionsResponse {
@@ -44,6 +40,7 @@ interface SpecOptionsResponse {
     products: ProductRow[];
     filterCount: number;
     totalDimensions: number;
+    summary: Summary | null;
   };
 }
 
@@ -56,6 +53,7 @@ export default function ConfiguratorPage() {
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [dimensions, setDimensions] = useState<DimensionOption[]>([]);
   const [products, setProducts] = useState<ProductRow[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +81,7 @@ export default function ConfiguratorPage() {
         if (json.success) {
           setDimensions(json.data.dimensions);
           setProducts(json.data.products);
+          setSummary(json.data.summary);
         } else {
           setError('無法載入規格選項');
         }
@@ -108,6 +107,7 @@ export default function ConfiguratorPage() {
     setFilters({});
     setDimensions([]);
     setProducts([]);
+    setSummary(null);
     setError(null);
   };
 
@@ -121,7 +121,7 @@ export default function ConfiguratorPage() {
   };
 
   const filterCount = Object.keys(filters).length;
-  const groupedProducts = useMemo(() => groupBySpec(products), [products]);
+  const hasUnknownAf = products.some((p) => p.match_type === 'unknown_af');
 
   return (
     <div className='space-y-4 p-4 sm:space-y-6 sm:p-6'>
@@ -206,12 +206,7 @@ export default function ConfiguratorPage() {
           <Separator />
           <Card>
             <CardHeader className='pb-3'>
-              <CardTitle className='text-base'>
-                比價結果
-                <Badge variant='secondary' className='ml-2'>
-                  {products.length} 筆
-                </Badge>
-              </CardTitle>
+              <CardTitle className='text-base'>比價結果</CardTitle>
               <CardDescription>
                 同規格在各通路的售價對照（最低價綠色標記）
               </CardDescription>
@@ -227,203 +222,21 @@ export default function ConfiguratorPage() {
                 <p className='text-muted-foreground py-8 text-center text-sm'>
                   目前條件無符合的價格資料
                 </p>
-              ) : groupedProducts.length > 0 ? (
-                <ComparisonTable groups={groupedProducts} />
               ) : (
-                <ProductTable products={products} />
+                <>
+                  {summary && (
+                    <ResultSummary
+                      summary={summary}
+                      hasUnknownAf={hasUnknownAf}
+                    />
+                  )}
+                  <ProductTable products={products} category={category} />
+                </>
               )}
             </CardContent>
           </Card>
         </>
       )}
-    </div>
-  );
-}
-
-function DimensionRow({
-  dimension,
-  onSelect,
-  loading
-}: {
-  dimension: DimensionOption;
-  onSelect: (val: string) => void;
-  loading: boolean;
-}) {
-  const sortedValues = sortSpecValues(dimension.values);
-
-  return (
-    <div>
-      <div className='mb-1.5 flex items-center gap-2'>
-        <span className='text-sm font-medium'>{dimension.label}</span>
-        <Badge variant='outline' className='text-[10px]'>
-          {dimension.values.length}
-        </Badge>
-      </div>
-      <div className='flex flex-wrap gap-1.5'>
-        {sortedValues.map((val) => {
-          const isSelected = dimension.selected === val;
-          return (
-            <Button
-              key={val}
-              variant={isSelected ? 'default' : 'outline'}
-              size='sm'
-              className='h-7 px-2.5 text-xs'
-              disabled={loading}
-              onClick={() => onSelect(val)}
-            >
-              {val}
-            </Button>
-          );
-        })}
-        {dimension.values.length === 0 && (
-          <span className='text-muted-foreground text-xs'>
-            （目前條件下無可用值）
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** Sort spec values — strict numeric check with Number() */
-function sortSpecValues(values: string[]): string[] {
-  const allNumeric = values.every((v) => v.trim() !== '' && !isNaN(Number(v)));
-  if (allNumeric) {
-    return [...values].sort((a, b) => Number(a) - Number(b));
-  }
-  return [...values].sort((a, b) => a.localeCompare(b, 'zh-Hant'));
-}
-
-interface SpecGroup {
-  specLabel: string;
-  entries: ProductRow[];
-  minPrice: number;
-  maxPrice: number;
-}
-
-function groupBySpec(products: ProductRow[]): SpecGroup[] {
-  const map = new Map<string, ProductRow[]>();
-  for (const p of products) {
-    const label = p.specs?.model || p.specs?.spec || p.specs?.name || 'unknown';
-    if (!map.has(label)) {
-      map.set(label, []);
-    }
-    map.get(label)!.push(p);
-  }
-
-  return Array.from(map.entries())
-    .filter(([, entries]) => entries.length >= 2)
-    .map(([specLabel, entries]) => {
-      const prices = entries.map((e) => e.sell_price);
-      return {
-        specLabel,
-        entries,
-        minPrice: Math.min(...prices),
-        maxPrice: Math.max(...prices)
-      };
-    })
-    .sort((a, b) => a.specLabel.localeCompare(b.specLabel, 'zh-Hant'));
-}
-
-function ComparisonTable({ groups }: { groups: SpecGroup[] }) {
-  return (
-    <div className='overflow-x-auto'>
-      <table className='w-full text-xs sm:text-sm'>
-        <thead>
-          <tr className='border-b'>
-            <th className='px-3 py-2 text-left font-medium'>規格/型號</th>
-            <th className='px-3 py-2 text-left font-medium'>通路比較</th>
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map((group) => (
-            <tr key={group.specLabel} className='border-b'>
-              <td className='px-3 py-2 font-mono'>{group.specLabel}</td>
-              <td className='px-3 py-2'>
-                <div className='flex flex-wrap gap-2'>
-                  {group.entries.map((p) => {
-                    const isMin =
-                      p.sell_price === group.minPrice &&
-                      group.minPrice !== group.maxPrice;
-                    const isMax =
-                      p.sell_price === group.maxPrice &&
-                      group.minPrice !== group.maxPrice;
-                    return (
-                      <span
-                        key={`${p.source}-${p.model ?? ''}-${p.sell_price}`}
-                        className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${
-                          isMin
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                            : isMax
-                              ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                              : 'bg-muted'
-                        }`}
-                      >
-                        <span className='text-muted-foreground text-[10px]'>
-                          {p.source}
-                        </span>
-                        <span className='font-mono font-medium tabular-nums'>
-                          ${p.sell_price.toLocaleString()}
-                        </span>
-                      </span>
-                    );
-                  })}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function ProductTable({ products }: { products: ProductRow[] }) {
-  const minPrice = Math.min(...products.map((p) => p.sell_price));
-
-  return (
-    <div className='overflow-x-auto'>
-      <table className='w-full text-xs sm:text-sm'>
-        <thead>
-          <tr className='border-b'>
-            <th className='px-3 py-2 text-left font-medium'>通路</th>
-            <th className='px-3 py-2 text-left font-medium'>品牌</th>
-            <th className='px-3 py-2 text-left font-medium'>型號</th>
-            <th className='px-3 py-2 text-right font-medium'>售價</th>
-            <th className='px-3 py-2 text-right font-medium'>牌價</th>
-            <th className='px-3 py-2 text-right font-medium'>折數</th>
-          </tr>
-        </thead>
-        <tbody>
-          {products.map((p) => (
-            <tr
-              key={`${p.source}-${p.model ?? ''}-${p.sell_price}`}
-              className='border-b'
-            >
-              <td className='px-3 py-2'>{p.source}</td>
-              <td className='px-3 py-2'>{p.brand ?? '—'}</td>
-              <td className='px-3 py-2 font-mono'>{p.model ?? '—'}</td>
-              <td className='px-3 py-2 text-right'>
-                <span
-                  className={`font-mono tabular-nums ${
-                    p.sell_price === minPrice
-                      ? 'font-bold text-green-600 dark:text-green-400'
-                      : ''
-                  }`}
-                >
-                  ${p.sell_price.toLocaleString()}
-                </span>
-              </td>
-              <td className='text-muted-foreground px-3 py-2 text-right font-mono tabular-nums'>
-                {p.list_price ? `$${p.list_price.toLocaleString()}` : '—'}
-              </td>
-              <td className='text-muted-foreground px-3 py-2 text-right font-mono tabular-nums'>
-                {p.discount ? `${(Number(p.discount) * 100).toFixed(1)}%` : '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }
