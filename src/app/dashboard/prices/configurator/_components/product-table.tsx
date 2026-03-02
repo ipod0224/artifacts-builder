@@ -1,8 +1,8 @@
 'use client';
 
-import { SPEC_DIMENSIONS } from '@/features/prices/constants';
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import type { PriceCategory } from '@/features/prices/constants';
-import { formatAmpere } from './utils';
 
 export interface ProductRow {
   source: string;
@@ -18,19 +18,13 @@ export interface ProductRow {
   specs: { model?: string; spec?: string; name?: string };
 }
 
-/** Determine which extra columns to show based on category */
-function getCategoryColumns(category: PriceCategory) {
-  const cols: { key: string; label: string; align: 'left' | 'right' }[] = [];
-  const dims = SPEC_DIMENSIONS[category];
-  if (!dims) return cols;
+/** Max unknown_af rows shown before "show more" */
+const UNKNOWN_AF_PREVIEW = 5;
 
-  if (category === 'nfb' || category === 'leakagebreaker') {
-    cols.push({ key: 'frame_af', label: 'AF', align: 'right' });
-    cols.push({ key: 'ampere', label: 'AT 範圍', align: 'left' });
-    cols.push({ key: 'series', label: '產品線', align: 'left' });
-  }
-
-  return cols;
+/** Format source + brand into a single display string */
+function formatSource(source: string, brand: string | null): string {
+  if (!brand || brand === source) return source;
+  return `${source}·${brand}`;
 }
 
 export function ProductTable({
@@ -44,9 +38,16 @@ export function ProductTable({
   const unknownAfProducts = products.filter(
     (p) => p.match_type === 'unknown_af'
   );
-  const allProducts = products;
-  const minPrice = Math.min(...allProducts.map((p) => p.sell_price));
-  const extraCols = getCategoryColumns(category);
+  const minPrice = Math.min(...products.map((p) => p.sell_price));
+  const showSeries =
+    (category === 'nfb' || category === 'leakagebreaker') &&
+    products.some((p) => p.series);
+
+  const [showAllUnknown, setShowAllUnknown] = useState(false);
+  const visibleUnknown = showAllUnknown
+    ? unknownAfProducts
+    : unknownAfProducts.slice(0, UNKNOWN_AF_PREVIEW);
+  const hiddenCount = unknownAfProducts.length - UNKNOWN_AF_PREVIEW;
 
   return (
     <div className='overflow-x-auto'>
@@ -54,16 +55,10 @@ export function ProductTable({
         <thead>
           <tr className='border-b'>
             <th className='px-2 py-2 text-left font-medium'>通路</th>
-            <th className='px-2 py-2 text-left font-medium'>品牌</th>
             <th className='px-2 py-2 text-left font-medium'>型號</th>
-            {extraCols.map((col) => (
-              <th
-                key={col.key}
-                className={`px-2 py-2 font-medium ${col.align === 'right' ? 'text-right' : 'text-left'}`}
-              >
-                {col.label}
-              </th>
-            ))}
+            {showSeries && (
+              <th className='px-2 py-2 text-left font-medium'>產品線</th>
+            )}
             <th className='px-2 py-2 text-right font-medium'>售價</th>
             <th className='px-2 py-2 text-right font-medium'>牌價</th>
             <th className='px-2 py-2 text-right font-medium'>折數</th>
@@ -71,32 +66,46 @@ export function ProductTable({
         </thead>
         <tbody>
           {exactProducts.map((p, idx) => (
-            <ProductRowCells
-              key={`exact-${p.source}-${p.model ?? ''}-${p.sell_price}-${idx}`}
-              product={p}
+            <Row
+              key={`e-${p.source}-${p.sell_price}-${idx}`}
+              p={p}
               minPrice={minPrice}
-              extraCols={extraCols}
+              showSeries={showSeries}
             />
           ))}
           {unknownAfProducts.length > 0 && (
             <>
               <tr>
                 <td
-                  colSpan={3 + extraCols.length + 3}
+                  colSpan={showSeries ? 6 : 5}
                   className='text-muted-foreground border-t-2 border-dashed px-2 py-1.5 text-xs font-medium'
                 >
-                  AF 未標示
+                  AF 未標示（{unknownAfProducts.length} 筆）
                 </td>
               </tr>
-              {unknownAfProducts.map((p, idx) => (
-                <ProductRowCells
-                  key={`unknown-${p.source}-${p.model ?? ''}-${p.sell_price}-${idx}`}
-                  product={p}
+              {visibleUnknown.map((p, idx) => (
+                <Row
+                  key={`u-${p.source}-${p.sell_price}-${idx}`}
+                  p={p}
                   minPrice={minPrice}
-                  extraCols={extraCols}
+                  showSeries={showSeries}
                   dimmed
                 />
               ))}
+              {hiddenCount > 0 && !showAllUnknown && (
+                <tr>
+                  <td colSpan={showSeries ? 6 : 5} className='px-2 py-1.5'>
+                    <Button
+                      variant='ghost'
+                      size='sm'
+                      className='text-muted-foreground h-auto p-0 text-xs'
+                      onClick={() => setShowAllUnknown(true)}
+                    >
+                      展開其餘 {hiddenCount} 筆 ▾
+                    </Button>
+                  </td>
+                </tr>
+              )}
             </>
           )}
         </tbody>
@@ -105,38 +114,30 @@ export function ProductTable({
   );
 }
 
-function ProductRowCells({
-  product: p,
+function Row({
+  p,
   minPrice,
-  extraCols,
+  showSeries,
   dimmed = false
 }: {
-  product: ProductRow;
+  p: ProductRow;
   minPrice: number;
-  extraCols: { key: string; label: string; align: 'left' | 'right' }[];
+  showSeries: boolean;
   dimmed?: boolean;
 }) {
   return (
     <tr className={`border-b ${dimmed ? 'bg-muted/30' : ''}`}>
-      <td className='px-2 py-2'>{p.source}</td>
-      <td className='px-2 py-2'>{p.brand ?? '—'}</td>
-      <td className='max-w-[200px] truncate px-2 py-2 font-mono'>
+      <td className='px-2 py-2 whitespace-nowrap'>
+        {formatSource(p.source, p.brand)}
+      </td>
+      <td className='max-w-[220px] truncate px-2 py-2 font-mono'>
         {p.model ?? '—'}
       </td>
-      {extraCols.map((col) => {
-        const raw = (p as unknown as Record<string, unknown>)[col.key] as
-          | string
-          | null;
-        const display = col.key === 'ampere' ? formatAmpere(raw) : (raw ?? '—');
-        return (
-          <td
-            key={col.key}
-            className={`px-2 py-2 font-mono ${col.align === 'right' ? 'text-right' : ''}`}
-          >
-            {display}
-          </td>
-        );
-      })}
+      {showSeries && (
+        <td className='text-muted-foreground px-2 py-2 font-mono'>
+          {p.series ?? ''}
+        </td>
+      )}
       <td className='px-2 py-2 text-right'>
         <span
           className={`font-mono tabular-nums ${
@@ -149,10 +150,10 @@ function ProductRowCells({
         </span>
       </td>
       <td className='text-muted-foreground px-2 py-2 text-right font-mono tabular-nums'>
-        {p.list_price ? `$${p.list_price.toLocaleString()}` : '—'}
+        {p.list_price ? `$${p.list_price.toLocaleString()}` : ''}
       </td>
       <td className='text-muted-foreground px-2 py-2 text-right font-mono tabular-nums'>
-        {p.discount ? `${(Number(p.discount) * 100).toFixed(1)}%` : '—'}
+        {p.discount ? `${(Number(p.discount) * 100).toFixed(1)}%` : ''}
       </td>
     </tr>
   );

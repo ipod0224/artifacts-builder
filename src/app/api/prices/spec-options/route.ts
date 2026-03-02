@@ -252,7 +252,15 @@ async function handleNfb(
     const query = `
       ${NFB_CTE}
       SELECT source, brand,
-        COALESCE(specs->>'model', specs->>'name') AS model,
+        CASE
+          WHEN specs->>'model' IS NOT NULL AND specs->>'model' != ''
+            THEN specs->>'model'
+          WHEN specs->>'name' ~ '(BH[A-Z]*-\\d+P\\d+A)'
+            THEN (regexp_match(specs->>'name', '(BH[A-Z]*-\\d+P\\d+A)'))[1]
+          WHEN v_rated_at IS NOT NULL
+            THEN 'NFB ' || v_poles || '/' || v_rated_at || 'A'
+          ELSE LEFT(specs->>'name', 30)
+        END AS model,
         sell_price::int AS sell_price,
         list_price::int AS list_price,
         discount,
