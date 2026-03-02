@@ -49,21 +49,20 @@ export async function GET(request: NextRequest) {
     }
 
     // For each dimension, query DISTINCT values excluding that dimension's own filter
+    // IMPORTANT: must use sql.json() for JSONB containment — JSON.stringify + ::jsonb
+    // silently fails with postgres tagged template (parameterised as text, not jsonb)
     const dimensionResults = await Promise.all(
       dimensions.map(async (dim) => {
         const { [dim.key]: _excluded, ...otherFilters } = filters;
-        const otherJsonb =
-          Object.keys(otherFilters).length > 0
-            ? JSON.stringify(otherFilters)
-            : null;
+        const hasOtherFilters = Object.keys(otherFilters).length > 0;
 
-        const rows = otherJsonb
+        const rows = hasOtherFilters
           ? await sql`
               SELECT DISTINCT specs->> ${dim.key} AS val
               FROM prices
               WHERE category = ${category}
                 AND sell_price > 0
-                AND specs @> ${otherJsonb}::jsonb
+                AND specs @> ${sql.json(otherFilters)}
                 AND specs->> ${dim.key} IS NOT NULL
                 AND specs->> ${dim.key} != ''
               ORDER BY val
@@ -88,8 +87,7 @@ export async function GET(request: NextRequest) {
     );
 
     // Fetch matching products — only project needed fields (not full specs)
-    const filterJsonb =
-      Object.keys(filters).length > 0 ? JSON.stringify(filters) : null;
+    const hasFilters = Object.keys(filters).length > 0;
 
     let products: {
       source: string;
@@ -101,7 +99,7 @@ export async function GET(request: NextRequest) {
       specs: { model?: string; spec?: string; name?: string };
     }[] = [];
 
-    if (filterJsonb) {
+    if (hasFilters) {
       const rows = await sql`
         SELECT source, brand,
           specs->>'model' AS model,
@@ -116,7 +114,7 @@ export async function GET(request: NextRequest) {
         FROM prices
         WHERE category = ${category}
           AND sell_price > 0
-          AND specs @> ${filterJsonb}::jsonb
+          AND specs @> ${sql.json(filters)}
         ORDER BY sell_price ASC
         LIMIT 100
       `;
