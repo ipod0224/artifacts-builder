@@ -99,9 +99,18 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: 未命中 → LLM fallback
+    // 轉發 auth headers（Basic Auth cookie + authorization）給內部 API 呼叫
+    const forwardHeaders: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+    const cookie = request.headers.get('cookie');
+    if (cookie) forwardHeaders['cookie'] = cookie;
+    const authorization = request.headers.get('authorization');
+    if (authorization) forwardHeaders['authorization'] = authorization;
+
     const searchRes = await fetch(`${getApiBase(request)}/api/rag/search`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: forwardHeaders,
       body: JSON.stringify({
         query: trimmedQuery,
         match_count: 5,
@@ -121,7 +130,7 @@ export async function POST(request: NextRequest) {
       `${getApiBase(request)}/api/rag/synthesize`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: forwardHeaders,
         body: JSON.stringify({ query: trimmedQuery, materials, chunks })
       }
     );
