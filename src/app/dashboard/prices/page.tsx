@@ -148,43 +148,48 @@ function SpecOverlapTable({
             </tr>
           </thead>
           <tbody>
-            {data.slice(0, 20).map((row, i) => (
-              <tr key={i} className='border-t'>
-                <td className='px-3 py-2 font-mono'>{row.spec_label}</td>
-                <td className='px-3 py-2'>{row.poles || '—'}</td>
-                <td className='px-3 py-2'>{row.ampere || '—'}</td>
-                <td className='px-3 py-2'>
-                  <div className='flex flex-wrap gap-2'>
-                    {row.prices.map((p, j) => {
-                      const prices = row.prices.map((x) => x.sell_price);
-                      const min = Math.min(...prices);
-                      const max = Math.max(...prices);
-                      const isMin = p.sell_price === min && min !== max;
-                      const isMax = p.sell_price === max && min !== max;
-                      return (
-                        <span
-                          key={j}
-                          className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${
-                            isMin
-                              ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                              : isMax
-                                ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                                : 'bg-muted'
-                          }`}
-                        >
-                          <span className='text-muted-foreground text-[10px]'>
-                            {p.source}
+            {data.slice(0, 20).map((row, i) => {
+              const sellPrices = row.prices.map((x) => x.sell_price);
+              const min = Math.min(...sellPrices);
+              const max = Math.max(...sellPrices);
+              return (
+                <tr
+                  key={`${row.spec_label}-${row.ampere}-${row.poles}`}
+                  className='border-t'
+                >
+                  <td className='px-3 py-2 font-mono'>{row.spec_label}</td>
+                  <td className='px-3 py-2'>{row.poles || '—'}</td>
+                  <td className='px-3 py-2'>{row.ampere || '—'}</td>
+                  <td className='px-3 py-2'>
+                    <div className='flex flex-wrap gap-2'>
+                      {row.prices.map((p) => {
+                        const isMin = p.sell_price === min && min !== max;
+                        const isMax = p.sell_price === max && min !== max;
+                        return (
+                          <span
+                            key={p.source}
+                            className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 ${
+                              isMin
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+                                : isMax
+                                  ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                  : 'bg-muted'
+                            }`}
+                          >
+                            <span className='text-muted-foreground text-[10px]'>
+                              {p.source}
+                            </span>
+                            <span className='font-mono font-medium tabular-nums'>
+                              ${p.sell_price.toLocaleString()}
+                            </span>
                           </span>
-                          <span className='font-mono font-medium tabular-nums'>
-                            ${p.sell_price.toLocaleString()}
-                          </span>
-                        </span>
-                      );
-                    })}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                        );
+                      })}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

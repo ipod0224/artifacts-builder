@@ -5,7 +5,8 @@ import type { TccGroup } from '../constants';
 const HOME = process.env.HOME || '/tmp';
 const TCC_PATH = resolve(HOME, 'seec-mcp/data/curves/tcc-data-all.json');
 
-// Singleton cache with mtime detection
+// Module-level cache (per-worker). Safe because loadTccData is idempotent;
+// worst case on cold start is re-reading the file.
 let _cache: Record<string, TccGroup> | null = null;
 let _mtime = 0;
 

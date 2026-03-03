@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type {
   SearchResult,
   MaterialMatch,
@@ -34,6 +34,7 @@ const INITIAL_STATE: SearchState = {
 
 export function useSearchRag() {
   const [state, setState] = useState<SearchState>(INITIAL_STATE);
+  const abortRef = useRef<AbortController | null>(null);
 
   const setQuery = useCallback((query: string) => {
     setState((prev) => ({ ...prev, query }));
@@ -42,6 +43,10 @@ export function useSearchRag() {
   const handleSearch = useCallback(async () => {
     const trimmed = state.query.trim();
     if (!trimmed) return;
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
 
     setState((prev) => ({
       ...prev,
@@ -59,7 +64,8 @@ export function useSearchRag() {
       const response = await fetch('/api/rag/answer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: trimmed })
+        body: JSON.stringify({ query: trimmed }),
+        signal: controller.signal
       });
 
       const result = await response.json();
@@ -81,6 +87,7 @@ export function useSearchRag() {
         isSearching: false
       }));
     } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
       const message = err instanceof Error ? err.message : '搜尋失敗';
       setState((prev) => ({
         ...prev,

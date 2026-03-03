@@ -1,24 +1,12 @@
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
+import { fetchJson } from '@/lib/api-client';
 import {
   COMMODITIES,
   type LatestPrice,
   type PriceChange,
   type HistoryResponse
 } from '../constants';
-
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = (await res.json()) as ApiResponse<T>;
-  if (!json.success) throw new Error('API returned success: false');
-  return json.data;
-}
 
 export function useCommodityLatest() {
   return useQuery({
@@ -61,7 +49,9 @@ export function useCommodityHistories(period: string) {
 }
 
 function getStartDate(days: string): string {
+  const n = Number(days);
+  const safeDays = Number.isFinite(n) && n > 0 ? n : 180;
   const start = new Date();
-  start.setDate(start.getDate() - parseInt(days));
+  start.setDate(start.getDate() - safeDays);
   return start.toISOString().slice(0, 10);
 }

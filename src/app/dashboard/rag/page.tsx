@@ -21,9 +21,11 @@ export default function RAGPage() {
   const { stats, materials, isConnected, error: statsError } = useRagStats();
   const search = useSearchRag();
 
-  const handleUpdateResult = useCallback((_id: string, _content: string) => {
-    // Results are in search hook state; edit triggers re-search if needed
-  }, []);
+  const handleUpdateResult = useCallback(() => {
+    if (search.query.trim()) {
+      search.handleSearch();
+    }
+  }, [search.query, search.handleSearch]);
   const edit = useEditDocument(handleUpdateResult);
 
   const error = search.error || statsError;

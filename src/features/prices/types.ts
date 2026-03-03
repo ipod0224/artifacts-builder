@@ -69,8 +69,3 @@ export interface PriceTrendData {
     unique_sizes: number;
   }[];
 }
-
-export interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-}

@@ -1,19 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/query-keys';
+import { fetchJson } from '@/lib/api-client';
 import type {
-  ApiResponse,
   PriceSummaryData,
   PriceCompareData,
   PriceTrendData
 } from '../types';
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = (await res.json()) as ApiResponse<T>;
-  if (!json.success) throw new Error('API returned success: false');
-  return json.data;
-}
 
 export function usePriceSummary() {
   return useQuery({

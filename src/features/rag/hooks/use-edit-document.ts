@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import type { SearchResult, SaveMessage } from '../types';
 
 interface EditState {
@@ -21,8 +21,10 @@ export function useEditDocument(
   onUpdateResult: (id: string, content: string) => void
 ) {
   const [state, setState] = useState<EditState>(INITIAL_STATE);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleEdit = useCallback((item: SearchResult) => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setState({
       editingItem: item,
       editContent: item.content,
@@ -32,6 +34,7 @@ export function useEditDocument(
   }, []);
 
   const handleCloseEdit = useCallback(() => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setState(INITIAL_STATE);
   }, []);
 
@@ -72,7 +75,8 @@ export function useEditDocument(
         }
       }));
 
-      setTimeout(() => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
         setState(INITIAL_STATE);
       }, 1500);
     } catch (err) {
