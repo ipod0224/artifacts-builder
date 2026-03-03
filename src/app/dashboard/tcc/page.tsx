@@ -1,67 +1,16 @@
-'use client';
+import { loadTccData, computeTccMeta } from '@/features/tcc/lib/load-tcc-data';
+import { TccClientPage } from '@/features/tcc/components/tcc-client-page';
 
-import { useCallback, useEffect, useState } from 'react';
-import { TccCurveChart } from '@/features/tcc/components/tcc-curve-chart';
-import { TccModelSelector } from '@/features/tcc/components/tcc-model-selector';
-import { TccInfoCards } from '@/features/tcc/components/tcc-info-cards';
-import {
-  type TccData,
-  type TccApiResponse,
-  MAX_OVERLAY
-} from '@/features/tcc/constants';
+export default async function TccPage() {
+  let groups;
+  let meta;
+  let error: string | null = null;
 
-export default function TccPage() {
-  const [groups, setGroups] = useState<TccData>({});
-  const [meta, setMeta] = useState({
-    totalGroups: 0,
-    totalModels: 0,
-    totalPoints: 0
-  });
-  const [selected, setSelected] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch('/api/tcc')
-      .then((r) => r.json())
-      .then((r: TccApiResponse) => {
-        if (r.success && r.data) {
-          setGroups(r.data.groups);
-          setMeta(r.data.meta);
-          // Default: select first MCCB group
-          const firstKey = Object.keys(r.data.groups)[0];
-          if (firstKey) setSelected([firstKey]);
-        } else {
-          setError('無法載入 TCC 數據');
-        }
-      })
-      .catch(() => setError('無法連線到 TCC API'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const handleToggle = useCallback((key: string) => {
-    setSelected((prev) => {
-      if (prev.includes(key)) {
-        return prev.filter((k) => k !== key);
-      }
-      if (prev.length >= MAX_OVERLAY) return prev;
-      return [...prev, key];
-    });
-  }, []);
-
-  const selectedGroups = selected
-    .map((key) => {
-      const group = groups[key];
-      return group ? { key, group } : null;
-    })
-    .filter((g): g is NonNullable<typeof g> => g !== null);
-
-  if (loading) {
-    return (
-      <div className='flex h-[50vh] items-center justify-center'>
-        <div className='text-muted-foreground text-sm'>載入 TCC 數據...</div>
-      </div>
-    );
+  try {
+    groups = await loadTccData();
+    meta = computeTccMeta(groups);
+  } catch (e) {
+    error = e instanceof Error ? e.message : 'Failed to load TCC data';
   }
 
   return (
@@ -83,22 +32,7 @@ export default function TccPage() {
         </div>
       )}
 
-      {/* Info Cards */}
-      <TccInfoCards
-        totalGroups={meta.totalGroups}
-        totalModels={meta.totalModels}
-        totalPoints={meta.totalPoints}
-      />
-
-      {/* Main Content: Selector + Chart */}
-      <div className='grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]'>
-        <TccModelSelector
-          groups={groups}
-          selected={selected}
-          onToggle={handleToggle}
-        />
-        <TccCurveChart selectedGroups={selectedGroups} />
-      </div>
+      {groups && meta && <TccClientPage groups={groups} meta={meta} />}
     </div>
   );
 }
