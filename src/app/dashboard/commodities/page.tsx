@@ -1,67 +1,31 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Separator } from '@/components/ui/separator';
 import { CommodityKpiCards } from '@/features/commodities/components/commodity-kpi-cards';
 import { CommodityTrendChart } from '@/features/commodities/components/commodity-trend-chart';
 import { CommodityChangeTable } from '@/features/commodities/components/commodity-change-table';
+import { PERIOD_OPTIONS } from '@/features/commodities/constants';
 import {
-  COMMODITIES,
-  PERIOD_OPTIONS,
-  type LatestPrice,
-  type PriceChange,
-  type HistoryResponse
-} from '@/features/commodities/constants';
+  useCommodityLatest,
+  useCommodityChanges,
+  useCommodityHistories
+} from '@/features/commodities/hooks/use-commodity-queries';
 
 export default function CommoditiesPage() {
-  const [latest, setLatest] = useState<LatestPrice[]>([]);
-  const [changes, setChanges] = useState<PriceChange[]>([]);
-  const [histories, setHistories] = useState<HistoryResponse[]>([]);
   const [period, setPeriod] = useState('180');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  // Fetch latest + changes on mount
-  useEffect(() => {
-    Promise.all([
-      fetch('/api/commodities/latest').then((r) => r.json()),
-      fetch('/api/commodities/changes').then((r) => r.json())
-    ])
-      .then(([latestRes, changesRes]) => {
-        if (latestRes.success) setLatest(latestRes.data);
-        if (changesRes.success) setChanges(changesRes.data);
-      })
-      .catch(() => setError('無法連線到大宗商品 API'))
-      .finally(() => setLoading(false));
-  }, []);
+  const {
+    data: latest = [],
+    isLoading,
+    error: latestError
+  } = useCommodityLatest();
+  const { data: changes = [], error: changesError } = useCommodityChanges();
+  const { histories, error: historyError } = useCommodityHistories(period);
 
-  // Fetch history when period changes
-  const fetchHistory = useCallback((days: string) => {
-    // Use start_date instead of limit — ensures all commodities
-    // (daily + monthly) share the same calendar time range
-    const start = new Date();
-    start.setDate(start.getDate() - parseInt(days));
-    const startDate = start.toISOString().slice(0, 10);
+  const error = latestError || changesError || historyError;
 
-    const promises = COMMODITIES.map((c) =>
-      fetch(
-        `/api/commodities/history?symbol=${encodeURIComponent(c.symbol)}&start_date=${startDate}&limit=2000`
-      )
-        .then((r) => r.json())
-        .then((r) => (r.success ? r.data : null))
-    );
-    Promise.all(promises)
-      .then((results) =>
-        setHistories(results.filter((r): r is HistoryResponse => r !== null))
-      )
-      .catch(() => setError('載入歷史資料失敗'));
-  }, []);
-
-  useEffect(() => {
-    fetchHistory(period);
-  }, [period, fetchHistory]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className='flex h-[50vh] items-center justify-center'>
         <div className='text-muted-foreground text-sm'>載入大宗商品數據...</div>
@@ -84,7 +48,7 @@ export default function CommoditiesPage() {
       {/* Error Banner */}
       {error && (
         <div className='rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-400'>
-          {error}
+          {error instanceof Error ? error.message : '載入資料失敗'}
         </div>
       )}
 

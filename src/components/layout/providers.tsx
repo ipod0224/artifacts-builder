@@ -5,6 +5,7 @@ import { dark } from '@clerk/themes';
 import { useTheme } from 'next-themes';
 import React from 'react';
 import { ActiveThemeProvider } from '../themes/active-theme';
+import { QueryProvider } from '@/lib/query-client';
 
 function MaybeClerk({ children }: { children: React.ReactNode }) {
   const { resolvedTheme } = useTheme();
@@ -32,8 +33,10 @@ export default function Providers({
   children: React.ReactNode;
 }) {
   return (
-    <ActiveThemeProvider initialTheme={activeThemeValue}>
-      <MaybeClerk>{children}</MaybeClerk>
-    </ActiveThemeProvider>
+    <QueryProvider>
+      <ActiveThemeProvider initialTheme={activeThemeValue}>
+        <MaybeClerk>{children}</MaybeClerk>
+      </ActiveThemeProvider>
+    </QueryProvider>
   );
 }

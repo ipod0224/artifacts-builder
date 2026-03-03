@@ -1,144 +1,37 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useState } from 'react';
 import { PriceSummaryCards } from '@/features/prices/components/price-summary-cards';
 import { SourceCompareChart } from '@/features/prices/components/source-compare-chart';
 import { PriceSpecChart } from '@/features/prices/components/price-spec-chart';
 import { CoverageMatrix } from '@/features/prices/components/coverage-matrix';
 import { CategorySelect } from '@/features/prices/components/category-select';
 import { Separator } from '@/components/ui/separator';
-import { type SourceTypeStat } from '@/features/prices/constants';
 import { IOSInstallPrompt } from '@/features/prices/components/ios-install-prompt';
 import { SourceTypeOverview } from '@/features/prices/components/source-type-overview';
-
-interface SummaryResponse {
-  success: boolean;
-  data: {
-    totals: {
-      total_items: number;
-      total_categories: number;
-      total_sources: number;
-      last_updated: string;
-    };
-    categories: {
-      category: string;
-      count: number;
-      avg_price: number;
-      min_price: number;
-      max_price: number;
-    }[];
-    sources: { source: string; count: number; categories: string[] }[];
-    sourceTypes: SourceTypeStat[];
-    recentUpdates: {
-      category: string;
-      source: string;
-      count: number;
-      updated_at: string;
-    }[];
-  };
-}
-
-interface CompareResponse {
-  success: boolean;
-  data: {
-    category: string;
-    sourceComparison: {
-      source: string;
-      item_count: number;
-      avg_sell_price: number;
-      avg_list_price: number;
-      avg_discount: string;
-      min_price: number;
-      max_price: number;
-      stddev_price: number;
-    }[];
-    specOverlap: {
-      spec_label: string;
-      ampere: string;
-      poles: string;
-      prices: {
-        source: string;
-        sell_price: number;
-        list_price: number;
-        discount: number;
-      }[];
-    }[];
-  };
-}
-
-interface TrendResponse {
-  success: boolean;
-  data: {
-    category: string;
-    specCurve: {
-      source: string;
-      sell_price: number;
-      ampere: string | null;
-      size: string | null;
-      spec_value: string | null;
-      model: string | null;
-      nominal_size: string | null;
-    }[];
-    distribution: { source: string; price_range: string; count: number }[];
-    coverage: {
-      source: string;
-      total: number;
-      unique_models: number;
-      unique_amperes: number;
-      unique_sizes: number;
-    }[];
-  };
-}
+import {
+  usePriceSummary,
+  usePriceCompare,
+  usePriceTrend
+} from '@/features/prices/hooks/use-price-queries';
 
 export default function PricesPage() {
-  const [summary, setSummary] = useState<SummaryResponse['data'] | null>(null);
-  const [compare, setCompare] = useState<CompareResponse['data'] | null>(null);
-  const [trend, setTrend] = useState<TrendResponse['data'] | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState('');
 
-  useEffect(() => {
-    fetch('/api/prices/summary')
-      .then((r) => r.json())
-      .then((r: SummaryResponse) => {
-        if (r.success) {
-          setSummary(r.data);
-          if (r.data.categories.length > 0 && !selectedCategory) {
-            setSelectedCategory(r.data.categories[0].category);
-          }
-        } else {
-          setError('無法載入價格摘要');
-        }
-      })
-      .catch(() => setError('無法連線到價格 API'))
-      .finally(() => setLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const { data: summary, isLoading, error: summaryError } = usePriceSummary();
 
-  const fetchCategoryData = useCallback((category: string) => {
-    setError(null);
-    Promise.all([
-      fetch(
-        `/api/prices/compare?category=${encodeURIComponent(category)}`
-      ).then((r) => r.json()),
-      fetch(`/api/prices/trend?category=${encodeURIComponent(category)}`).then(
-        (r) => r.json()
-      )
-    ])
-      .then(([cmp, trd]: [CompareResponse, TrendResponse]) => {
-        if (cmp.success) setCompare(cmp.data);
-        if (trd.success) setTrend(trd.data);
-      })
-      .catch(() => setError('載入品類資料失敗'));
-  }, []);
+  // Auto-select first category when summary loads
+  const effectiveCategory =
+    selectedCategory ||
+    (summary?.categories.length ? summary.categories[0].category : '');
 
-  useEffect(() => {
-    if (selectedCategory) {
-      fetchCategoryData(selectedCategory);
-    }
-  }, [selectedCategory, fetchCategoryData]);
+  const { data: compare, error: compareError } =
+    usePriceCompare(effectiveCategory);
+  const { data: trend, error: trendError } = usePriceTrend(effectiveCategory);
 
-  if (loading) {
+  const error = summaryError || compareError || trendError;
+
+  if (isLoading) {
     return (
       <div className='flex h-[50vh] items-center justify-center'>
         <div className='text-muted-foreground text-sm'>載入價格數據...</div>
@@ -161,7 +54,7 @@ export default function PricesPage() {
       {/* Error Banner */}
       {error && (
         <div className='rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-400'>
-          {error}
+          {error instanceof Error ? error.message : '載入資料失敗'}
         </div>
       )}
 
@@ -182,7 +75,7 @@ export default function PricesPage() {
       >
         <span className='text-sm font-medium'>品類篩選</span>
         <CategorySelect
-          value={selectedCategory}
+          value={effectiveCategory}
           onValueChange={setSelectedCategory}
           categories={summary?.categories ?? []}
         />
@@ -192,11 +85,11 @@ export default function PricesPage() {
       <div className='grid grid-cols-1 gap-4 lg:grid-cols-2'>
         <SourceCompareChart
           data={compare?.sourceComparison ?? []}
-          category={selectedCategory}
+          category={effectiveCategory}
         />
         <PriceSpecChart
           data={trend?.specCurve ?? []}
-          category={selectedCategory}
+          category={effectiveCategory}
         />
       </div>
 
