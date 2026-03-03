@@ -7,10 +7,7 @@ import { PriceSpecChart } from '@/features/prices/components/price-spec-chart';
 import { CoverageMatrix } from '@/features/prices/components/coverage-matrix';
 import { CategorySelect } from '@/features/prices/components/category-select';
 import { Separator } from '@/components/ui/separator';
-import {
-  ALLOWED_CATEGORIES,
-  type SourceTypeStat
-} from '@/features/prices/constants';
+import { type SourceTypeStat } from '@/features/prices/constants';
 import { IOSInstallPrompt } from '@/features/prices/components/ios-install-prompt';
 import { SourceTypeOverview } from '@/features/prices/components/source-type-overview';
 
@@ -97,9 +94,7 @@ export default function PricesPage() {
   const [summary, setSummary] = useState<SummaryResponse['data'] | null>(null);
   const [compare, setCompare] = useState<CompareResponse['data'] | null>(null);
   const [trend, setTrend] = useState<TrendResponse['data'] | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string>(
-    ALLOWED_CATEGORIES[1]
-  );
+  const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -107,12 +102,18 @@ export default function PricesPage() {
     fetch('/api/prices/summary')
       .then((r) => r.json())
       .then((r: SummaryResponse) => {
-        if (r.success) setSummary(r.data);
-        else setError('無法載入價格摘要');
+        if (r.success) {
+          setSummary(r.data);
+          if (r.data.categories.length > 0 && !selectedCategory) {
+            setSelectedCategory(r.data.categories[0].category);
+          }
+        } else {
+          setError('無法載入價格摘要');
+        }
       })
       .catch(() => setError('無法連線到價格 API'))
       .finally(() => setLoading(false));
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchCategoryData = useCallback((category: string) => {
     setError(null);

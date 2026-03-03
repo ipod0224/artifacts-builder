@@ -25,10 +25,10 @@ export function CategorySelect({
 }: CategorySelectProps) {
   return (
     <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger className='w-full sm:w-[280px]'>
+      <SelectTrigger className='w-full sm:w-[320px]'>
         <SelectValue placeholder='選擇品類' />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent className='max-h-[300px]'>
         {categories.map((cat) => (
           <SelectItem key={cat.category} value={cat.category}>
             {CATEGORY_LABELS[cat.category as PriceCategory] || cat.category}
