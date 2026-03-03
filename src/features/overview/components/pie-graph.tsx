@@ -10,7 +10,7 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { EChartContainer } from '@/components/ui/echarts';
+import { EChartContainer } from '@/components/ui/echarts-lazy';
 import type { EChartsOption } from 'echarts';
 
 const PIE_COLORS = ['#2563eb', '#dc2626', '#16a34a', '#ea580c', '#9333ea'];

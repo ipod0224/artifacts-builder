@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { EChartContainer } from '@/components/ui/echarts';
+import { EChartContainer } from '@/components/ui/echarts-lazy';
 import type { EChartsOption } from 'echarts';
 import { COMMODITIES, type HistoryResponse } from '../constants';
 

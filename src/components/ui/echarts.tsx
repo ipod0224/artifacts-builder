@@ -3,14 +3,7 @@
 import * as React from 'react';
 import ReactEChartsCore from 'echarts-for-react/lib/core';
 import * as echarts from 'echarts/core';
-import {
-  LineChart,
-  BarChart,
-  PieChart,
-  ScatterChart,
-  GaugeChart,
-  HeatmapChart
-} from 'echarts/charts';
+import { LineChart, BarChart, PieChart } from 'echarts/charts';
 import {
   GridComponent,
   TooltipComponent,
@@ -33,9 +26,6 @@ echarts.use([
   LineChart,
   BarChart,
   PieChart,
-  ScatterChart,
-  GaugeChart,
-  HeatmapChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,

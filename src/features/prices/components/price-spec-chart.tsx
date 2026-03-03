@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { EChartContainer } from '@/components/ui/echarts';
+import { EChartContainer } from '@/components/ui/echarts-lazy';
 import type { EChartsOption } from 'echarts';
 
 const FALLBACK_COLORS = [
