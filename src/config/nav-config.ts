@@ -53,7 +53,7 @@ export const navItems: NavItem[] = [
     title: '價格情報',
     url: '/dashboard/prices',
     icon: 'priceIntel',
-    isActive: false,
+    isActive: true,
     shortcut: ['p', 'r'],
     items: [
       {
@@ -61,6 +61,14 @@ export const navItems: NavItem[] = [
         url: '/dashboard/prices/configurator'
       }
     ]
+  },
+  {
+    title: 'TCC 曲線',
+    url: '/dashboard/tcc',
+    icon: 'tcc',
+    isActive: false,
+    shortcut: ['t', 'c'],
+    items: []
   },
   {
     title: '原物料指數',

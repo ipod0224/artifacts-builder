@@ -1,6 +1,7 @@
 import {
   IconAlertTriangle,
   IconArrowRight,
+  IconBolt,
   IconCheck,
   IconChevronLeft,
   IconChevronRight,
@@ -89,5 +90,6 @@ export const Icons = {
   database: IconDatabase,
   priceIntel: IconChartLine,
   commodity: IconChartHistogram,
-  quote: IconBlockquote
+  quote: IconBlockquote,
+  tcc: IconBolt
 };
