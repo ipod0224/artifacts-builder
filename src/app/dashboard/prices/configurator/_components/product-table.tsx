@@ -21,7 +21,15 @@ export interface ProductRow {
   ampere: string | null;
   series: string | null;
   match_type: 'exact' | 'unknown_af';
-  specs: { model?: string; spec?: string; name?: string };
+  specs: {
+    model?: string;
+    spec?: string;
+    name?: string;
+    price_north?: number | null;
+    price_central?: number | null;
+    price_south?: number | null;
+    price_east?: number | null;
+  };
   labor_cost_per_m?: number | null;
 }
 
@@ -235,6 +243,17 @@ function Row({
         >
           ${p.sell_price.toLocaleString()}
         </span>
+        {p.source === 'PCIC' && (
+          <span className='text-muted-foreground block text-[10px] leading-tight'>
+            最高決標價
+          </span>
+        )}
+        {p.source === 'TCRI' && p.specs?.price_north != null && (
+          <span className='text-muted-foreground block text-[10px] leading-tight'>
+            北{p.specs.price_north} 中{p.specs.price_central} 南
+            {p.specs.price_south} 東{p.specs.price_east}
+          </span>
+        )}
       </td>
       <td className='text-muted-foreground px-2 py-2 text-right font-mono tabular-nums'>
         {p.list_price ? `$${p.list_price.toLocaleString()}` : ''}

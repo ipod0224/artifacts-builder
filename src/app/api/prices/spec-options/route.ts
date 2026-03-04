@@ -258,7 +258,7 @@ async function handleNfb(
 
     const query = `
       ${NFB_CTE}
-      SELECT source, brand,
+      SELECT id, source, brand,
         CASE
           WHEN specs->>'model' IS NOT NULL AND specs->>'model' != ''
             THEN specs->>'model'
@@ -278,7 +278,19 @@ async function handleNfb(
         json_build_object(
           'model', specs->>'model',
           'spec',  specs->>'spec',
-          'name',  specs->>'name'
+          'name',  COALESCE(
+            specs->>'name',
+            NULLIF(TRIM(CONCAT_WS(' ',
+              NULLIF(specs->>'model', ''),
+              NULLIF(specs->>'brand', ''),
+              CASE WHEN specs->>'spec' IS NOT NULL
+                THEN specs->>'spec' || 'mm²' END
+            )), '')
+          ),
+          'price_north', (specs->>'price_north')::numeric,
+          'price_central', (specs->>'price_central')::numeric,
+          'price_south', (specs->>'price_south')::numeric,
+          'price_east', (specs->>'price_east')::numeric
         ) AS specs
       FROM nfb_enriched
       WHERE ${whereClause}
@@ -390,7 +402,7 @@ async function handleGeneric(
     const filterClause = whereParts.join(' AND ');
 
     const query = `
-      SELECT source, brand,
+      SELECT id, source, brand,
         COALESCE(specs->>'model', specs->>'name') AS model,
         sell_price::int AS sell_price,
         list_price::int AS list_price,
@@ -402,7 +414,19 @@ async function handleGeneric(
         json_build_object(
           'model', specs->>'model',
           'spec',  specs->>'spec',
-          'name',  specs->>'name'
+          'name',  COALESCE(
+            specs->>'name',
+            NULLIF(TRIM(CONCAT_WS(' ',
+              NULLIF(specs->>'model', ''),
+              NULLIF(specs->>'brand', ''),
+              CASE WHEN specs->>'spec' IS NOT NULL
+                THEN specs->>'spec' || 'mm²' END
+            )), '')
+          ),
+          'price_north', (specs->>'price_north')::numeric,
+          'price_central', (specs->>'price_central')::numeric,
+          'price_south', (specs->>'price_south')::numeric,
+          'price_east', (specs->>'price_east')::numeric
         ) AS specs
       FROM prices
       WHERE category = $1
@@ -442,6 +466,7 @@ async function handleGeneric(
 // ─── Types ────────────────────────────────────────────────────────────────
 
 interface ProductRow {
+  id: string;
   source: string;
   brand: string | null;
   model: string | null;

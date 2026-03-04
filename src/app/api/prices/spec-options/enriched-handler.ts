@@ -557,7 +557,11 @@ export async function handleEnriched(
               CASE WHEN specs->>'spec' IS NOT NULL
                 THEN specs->>'spec' || 'mm²' END
             )), '')
-          )
+          ),
+          'price_north', (specs->>'price_north')::numeric,
+          'price_central', (specs->>'price_central')::numeric,
+          'price_south', (specs->>'price_south')::numeric,
+          'price_east', (specs->>'price_east')::numeric
         ) AS specs
       FROM ${config.cteAlias}
       WHERE ${whereClause}
