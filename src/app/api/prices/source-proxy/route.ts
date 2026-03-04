@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import iconv from 'iconv-lite';
+import https from 'node:https';
 import { sql } from '@/lib/db';
+import Database from 'better-sqlite3';
 
 const WIRE_BASE = 'http://www.wire.com.tw';
 const LOGIN_URL = `${WIRE_BASE}/index0_a.asp`;
@@ -238,129 +240,188 @@ function fmtNum(n: number | null | undefined): string {
   return n.toLocaleString('zh-TW');
 }
 
-/** Render PCIC price record as HTML info card */
-function renderPcicHtml(record: {
-  id: string;
-  sell_price: number | null;
-  specs: Record<string, unknown>;
-}): string {
-  const s = record.specs;
-  const code = String(s.code ?? '');
-  const name = String(s.name ?? '');
-  const unit = String(s.unit ?? '');
-  const priceMin = s.price_min as number | null;
-  const priceMax = s.price_max as number | null;
-  const sampleCount = s.sample_count as number | null;
-  const awardPct = s.award_percentage as number | null;
-  const queryStart = String(s.query_start ?? '');
-  const queryEnd = String(s.query_end ?? '');
+// ── PCIC live API ──
+
+const PCIC_API_BASE =
+  'https://pcic.pcc.gov.tw/pwc-web/api/service/MRP0201R/queryBasic';
+
+interface PcicItem {
+  code: string;
+  name: string;
+  unit: string;
+  price: number;
+  pxmin: number;
+  pxmax: number;
+  num: number;
+  award_percentage: string;
+}
+
+/** Call PCIC queryBasic API with per-request TLS bypass (incomplete cert chain) */
+function fetchPcicApi(keyword: string): Promise<PcicItem[]> {
+  const now = new Date();
+  const twoYearsAgo = new Date(now);
+  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 5);
+  const fmtDate = (d: Date) =>
+    `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/01`;
+
+  const params = new URLSearchParams({
+    key_word: keyword,
+    isBaseQuery: 'true',
+    city_id: '',
+    town_id: '',
+    pro_scale: 'win1',
+    pro_type: '',
+    queryAwardPercentage: 'N',
+    codes: '',
+    account_id: '00000000-0000-0000-0000-000000000000',
+    create_id: 'TEST',
+    mrpNo: '0201',
+    isDefaultBackTime: 'true',
+    startmonth: fmtDate(twoYearsAgo),
+    endmonth: fmtDate(now),
+    backtime: now.toISOString().slice(0, 10)
+  });
+
+  const url = `${PCIC_API_BASE}?${params}`;
+
+  return new Promise((resolve, reject) => {
+    const req = https.get(
+      url,
+      { rejectUnauthorized: false, timeout: 15000 },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk: Buffer) => (data += chunk.toString()));
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data);
+            if (json.status !== '0') {
+              reject(new Error(`PCIC API status: ${json.status}`));
+              return;
+            }
+            resolve((json.response ?? []) as PcicItem[]);
+          } catch {
+            reject(new Error('Invalid JSON from PCIC API'));
+          }
+        });
+      }
+    );
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('PCIC API timeout'));
+    });
+  });
+}
+
+/** Render PCIC live API results as HTML table */
+function renderPcicLiveHtml(
+  items: PcicItem[],
+  highlightCode: string,
+  keyword: string
+): string {
+  const rows = items
+    .map((item) => {
+      const isTarget = item.code === highlightCode;
+      const cls = isTarget ? ' class="highlight"' : '';
+      return `<tr${cls}>
+        <td class="mono">${escapeHtml(item.code)}</td>
+        <td>${escapeHtml(item.name)}</td>
+        <td>${escapeHtml(item.unit)}</td>
+        <td class="num">$${fmtNum(item.pxmin)}</td>
+        <td class="num">$${fmtNum(item.pxmax)}</td>
+        <td class="num">${fmtNum(item.num)}</td>
+        <td class="num">${escapeHtml(item.award_percentage)}%</td>
+      </tr>`;
+    })
+    .join('\n');
 
   return `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PCIC 公共工程價格 — ${escapeHtml(code)}</title>
+  <title>PCIC 即時查詢 — ${escapeHtml(keyword)}</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 20px; background: #f8fafc; color: #1e293b; }
-    .card { max-width: 560px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 24px; }
-    .badge { display: inline-block; background: #3b82f6; color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 4px; margin-bottom: 12px; }
-    h1 { font-size: 16px; margin: 0 0 8px; line-height: 1.5; }
-    .code { color: #64748b; font-family: monospace; font-size: 13px; margin-bottom: 16px; }
-    table { width: 100%; border-collapse: collapse; }
-    td { padding: 8px 0; font-size: 14px; border-bottom: 1px solid #f1f5f9; }
-    td:first-child { color: #64748b; width: 120px; }
-    td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-    .price { font-size: 18px; font-weight: 700; color: #059669; }
-    .footer { margin-top: 16px; font-size: 11px; color: #94a3b8; text-align: center; }
-    .footer a { color: #3b82f6; text-decoration: none; }
+    body { font-family: "Noto Sans TC", -apple-system, sans-serif; margin: 0; padding: 16px; background: #f0f4f8; color: #1e293b; font-size: 14px; }
+    .header { max-width: 960px; margin: 0 auto 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .header img { height: 28px; }
+    .header h1 { font-size: 16px; margin: 0; color: #1e40af; }
+    .header a { font-size: 12px; color: #3b82f6; text-decoration: none; margin-left: auto; }
+    .meta { max-width: 960px; margin: 0 auto 12px; font-size: 12px; color: #64748b; }
+    .meta code { background: #e2e8f0; padding: 2px 6px; border-radius: 3px; font-size: 11px; word-break: break-all; }
+    table { max-width: 960px; margin: 0 auto; width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    th { background: #1e40af; color: #fff; padding: 10px 8px; font-size: 12px; font-weight: 500; text-align: left; white-space: nowrap; }
+    td { padding: 8px; border-bottom: 1px solid #f1f5f9; }
+    .mono { font-family: monospace; font-size: 12px; white-space: nowrap; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .highlight { background: #fef9c3; }
+    .highlight td { font-weight: 600; }
+    .footer { max-width: 960px; margin: 16px auto 0; font-size: 11px; color: #94a3b8; text-align: center; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <span class="badge">PCIC 公共工程價格資料庫</span>
-    <h1>${escapeHtml(name)}</h1>
-    <div class="code">${escapeHtml(code)}</div>
-    <table>
-      <tr><td>單位</td><td>${escapeHtml(unit)}</td></tr>
-      <tr><td>最低價</td><td class="price">$${fmtNum(priceMin)}</td></tr>
-      <tr><td>最高價</td><td>$${fmtNum(priceMax)}</td></tr>
-      <tr><td>樣本數</td><td>${fmtNum(sampleCount)} 筆</td></tr>
-      <tr><td>決標比</td><td>${awardPct != null ? `${awardPct}%` : '—'}</td></tr>
-      <tr><td>查詢區間</td><td>${escapeHtml(queryStart)} ~ ${escapeHtml(queryEnd)}</td></tr>
-    </table>
-    <div class="footer">
-      資料來源：<a href="https://pcic.pcc.gov.tw/pwc-web/" target="_blank" rel="noopener">行政院公共工程委員會</a>
-    </div>
+  <div class="header">
+    <h1>PCIC 公共工程價格資料庫 — 即時查詢</h1>
+    <a href="https://pcic.pcc.gov.tw/pwc-web/" target="_blank" rel="noopener">前往 PCIC 網站自行查詢 →</a>
+  </div>
+  <div class="meta">
+    關鍵字：<strong>${escapeHtml(keyword)}</strong>　|
+    查詢時間：${escapeHtml(new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' }))}　|
+    結果：${items.length} 筆
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>PCCES 碼</th><th>品名</th><th>單位</th>
+        <th style="text-align:right">最低價</th>
+        <th style="text-align:right">最高價</th>
+        <th style="text-align:right">樣本數</th>
+        <th style="text-align:right">決標比</th>
+      </tr>
+    </thead>
+    <tbody>${rows || '<tr><td colspan="7" style="text-align:center;padding:20px">查無資料</td></tr>'}</tbody>
+  </table>
+  <div class="footer">
+    資料來源：行政院公共工程委員會 PCIC API（即時查詢，非快取）
   </div>
 </body>
 </html>`;
 }
 
-/** Render TCRI price record as HTML info card */
-function renderTcriHtml(record: {
-  id: string;
-  sell_price: number | null;
-  specs: Record<string, unknown>;
-}): string {
-  const s = record.specs;
-  const code = String(s.pcces_code ?? '');
-  const name = String(s.name ?? '');
-  const unit = String(s.unit ?? '');
-  const period = String(s.period ?? '');
-  const priceNorth = s.price_north as number | null;
-  const priceCentral = s.price_central as number | null;
-  const priceSouth = s.price_south as number | null;
-  const priceEast = s.price_east as number | null;
+// ── TCRI category URL lookup ──
 
-  return `<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>TCRI 營建物價 — ${escapeHtml(code)}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 20px; background: #f8fafc; color: #1e293b; }
-    .card { max-width: 560px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 24px; }
-    .badge { display: inline-block; background: #f59e0b; color: #fff; font-size: 12px; padding: 2px 8px; border-radius: 4px; margin-bottom: 12px; }
-    h1 { font-size: 16px; margin: 0 0 8px; line-height: 1.5; }
-    .code { color: #64748b; font-family: monospace; font-size: 13px; }
-    .period { color: #64748b; font-size: 13px; margin-bottom: 16px; }
-    table { width: 100%; border-collapse: collapse; }
-    td { padding: 8px 0; font-size: 14px; border-bottom: 1px solid #f1f5f9; }
-    td:first-child { color: #64748b; width: 120px; }
-    td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
-    .price { font-weight: 700; color: #059669; }
-    .footer { margin-top: 16px; font-size: 11px; color: #94a3b8; text-align: center; }
-    .footer a { color: #3b82f6; text-decoration: none; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <span class="badge">TCRI 營建物價</span>
-    <h1>${escapeHtml(name)}</h1>
-    <div class="code">${escapeHtml(code)}</div>
-    <div class="period">${escapeHtml(period)}</div>
-    <table>
-      <tr><td>單位</td><td>${escapeHtml(unit)}</td></tr>
-      <tr><td>北部</td><td class="price">$${fmtNum(priceNorth)}</td></tr>
-      <tr><td>中部</td><td class="price">$${fmtNum(priceCentral)}</td></tr>
-      <tr><td>南部</td><td class="price">$${fmtNum(priceSouth)}</td></tr>
-      <tr><td>東部</td><td class="price">$${fmtNum(priceEast)}</td></tr>
-    </table>
-    <div class="footer">
-      資料來源：<a href="https://www.tcri.org.tw/" target="_blank" rel="noopener">台灣營建研究院</a>
-    </div>
-  </div>
-</body>
-</html>`;
+const TCRI_DB_PATH = `${process.env.HOME}/tcri-mcp/data/tcri.db`;
+
+/** Look up TCRI category page URL from tcri.db by pcces_code */
+function getTcriCategoryUrl(
+  pccesCode: string
+): { url: string; category: string } | null {
+  try {
+    const db = new Database(TCRI_DB_PATH, { readonly: true });
+    try {
+      const row = db
+        .prepare(
+          `SELECT c.url, c.name as category
+           FROM prices p JOIN categories c ON p.category = c.name
+           WHERE p.pcces_code = ? AND c.url IS NOT NULL
+           LIMIT 1`
+        )
+        .get(pccesCode) as { url: string; category: string } | undefined;
+      return row ?? null;
+    } finally {
+      db.close();
+    }
+  } catch {
+    return null;
+  }
 }
 
 /**
  * GET /api/prices/source-proxy?source=銘宣&id=cable-iv-walsin-2-1c
  *
  * For 銘宣: auto-login + proxy the price page (Big5→UTF-8)
- * For PCIC/TCRI: query DB + render HTML info card
+ * For PCIC: live API query → render full results table
+ * For TCRI: redirect to category page on TCRI website
  * For 茂忠: redirect to m5.com.tw product page
  * For GDrive sources: redirect to Google Sheets
  * For others: redirect to static URL
@@ -406,14 +467,15 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // ── PCIC / TCRI: query DB + render HTML info card ──
-  if (source === 'PCIC' || source === 'TCRI') {
+  // ── PCIC: live API query → render results table ──
+  if (source === 'PCIC') {
     if (!id || id.length > 200) {
       return NextResponse.json({ error: 'Invalid record ID' }, { status: 400 });
     }
     try {
+      // Get keyword and code from our DB record
       const rows = await sql`
-        SELECT id, sell_price, specs FROM prices WHERE id = ${id} LIMIT 1
+        SELECT specs FROM prices WHERE id = ${id} LIMIT 1
       `;
       if (rows.length === 0) {
         return NextResponse.json(
@@ -421,26 +483,67 @@ export async function GET(request: NextRequest) {
           { status: 404 }
         );
       }
-      const record = rows[0] as {
-        id: string;
-        sell_price: number | null;
-        specs: Record<string, unknown>;
-      };
-      const html =
-        source === 'PCIC' ? renderPcicHtml(record) : renderTcriHtml(record);
+      const specs = rows[0].specs as Record<string, unknown>;
+      const code = String(specs.code ?? '');
+      const keyword = String(specs.keyword ?? '');
+
+      if (!code) {
+        return NextResponse.json(
+          { error: 'Record has no PCCES code' },
+          { status: 400 }
+        );
+      }
+
+      // Call PCIC API live — search by PCCES code for precise match
+      const items = await fetchPcicApi(code);
+      const html = renderPcicLiveHtml(items, code, keyword || code);
 
       return new NextResponse(html, {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'private, max-age=3600'
+          'Cache-Control': 'private, max-age=300'
         }
       });
     } catch (err) {
-      console.error(`${source} proxy error for id=${id}:`, err);
-      return NextResponse.json(
-        { error: `${source} query failed` },
-        { status: 502 }
-      );
+      console.error('PCIC proxy error:', err);
+      return NextResponse.json({ error: 'PCIC query failed' }, { status: 502 });
+    }
+  }
+
+  // ── TCRI: redirect to category page on TCRI website ──
+  if (source === 'TCRI') {
+    if (!id || id.length > 200) {
+      return NextResponse.json({ error: 'Invalid record ID' }, { status: 400 });
+    }
+    try {
+      const rows = await sql`
+        SELECT specs FROM prices WHERE id = ${id} LIMIT 1
+      `;
+      if (rows.length === 0) {
+        return NextResponse.json(
+          { error: `Record not found: ${id}` },
+          { status: 404 }
+        );
+      }
+      const specs = rows[0].specs as Record<string, unknown>;
+      const pccesCode = String(specs.pcces_code ?? '');
+      const period = String(specs.period ?? '');
+      const periodNum = period.replace(/\D/g, '');
+
+      // Look up category URL from tcri.db
+      const cat = pccesCode ? getTcriCategoryUrl(pccesCode) : null;
+      if (cat) {
+        const url = periodNum
+          ? `${cat.url}?announce=R${periodNum}&search_per_page=50`
+          : cat.url;
+        return NextResponse.redirect(url);
+      }
+
+      // Fallback: redirect to TCRI homepage
+      return NextResponse.redirect('https://ccd.tcri.org.tw/material-item');
+    } catch (err) {
+      console.error('TCRI proxy error:', err);
+      return NextResponse.json({ error: 'TCRI query failed' }, { status: 502 });
     }
   }
 
