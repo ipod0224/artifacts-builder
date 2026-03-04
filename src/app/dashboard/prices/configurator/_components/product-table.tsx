@@ -2,9 +2,15 @@
 
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger
+} from '@/components/ui/popover';
 import type { PriceCategory } from '@/features/prices/constants';
 
 export interface ProductRow {
+  id: string;
   source: string;
   brand: string | null;
   model: string | null;
@@ -26,6 +32,35 @@ const UNKNOWN_AF_PREVIEW = 5;
 function formatSource(source: string, brand: string | null): string {
   if (!brand || brand === source) return source;
   return `${source}·${brand}`;
+}
+
+/** Source display labels */
+const SOURCE_LABELS: Record<string, string> = {
+  PCIC: 'PCIC 公共工程價格資料庫',
+  TCRI: 'TCRI 營建物價',
+  銘宣: '銘宣實售價',
+  鍾榮: '牌價-電纜',
+  朝立: '牌價 (無熔絲開關)',
+  東元電機: '牌價 (無熔絲開關)',
+  三菱電機: '牌價 (無熔絲開關)',
+  萬蕙昇: '牌價 (管件)',
+  茂忠: '茂忠商品頁',
+  信佳電機: '牌價 (變壓器)',
+  樺晟: '樺晟官網'
+};
+
+/** All sources go through proxy route for unified handling */
+function getSourceRef(
+  source: string,
+  id: string
+): { url: string; label: string } | null {
+  const label = SOURCE_LABELS[source];
+  if (!label) return null;
+  const params = new URLSearchParams({ source, id });
+  return {
+    url: `/api/prices/source-proxy?${params.toString()}`,
+    label
+  };
 }
 
 /** Category-aware label for the "unknown" section */
@@ -91,9 +126,9 @@ export function ProductTable({
           </tr>
         </thead>
         <tbody>
-          {exactProducts.map((p, idx) => (
+          {exactProducts.map((p) => (
             <Row
-              key={`e-${p.source}-${p.sell_price}-${idx}`}
+              key={p.id}
               p={p}
               minPrice={minPrice}
               showSeries={showSeries}
@@ -110,9 +145,9 @@ export function ProductTable({
                   {unknownLabel}（{unknownAfProducts.length} 筆）
                 </td>
               </tr>
-              {visibleUnknown.map((p, idx) => (
+              {visibleUnknown.map((p) => (
                 <Row
-                  key={`u-${p.source}-${p.sell_price}-${idx}`}
+                  key={p.id}
                   p={p}
                   minPrice={minPrice}
                   showSeries={showSeries}
@@ -158,7 +193,29 @@ function Row({
   return (
     <tr className={`border-b ${dimmed ? 'bg-muted/30' : ''}`}>
       <td className='px-2 py-2 whitespace-nowrap'>
-        {formatSource(p.source, p.brand)}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type='button'
+              className='min-h-[44px] cursor-pointer text-left underline decoration-dotted underline-offset-2 hover:decoration-solid'
+            >
+              {formatSource(p.source, p.brand)}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align='start'
+            collisionPadding={12}
+            className='w-auto max-w-xs space-y-1 p-2.5'
+          >
+            <p className='text-xs leading-relaxed'>
+              {p.specs?.name || '（無原始品名）'}
+            </p>
+            <p className='text-muted-foreground font-mono text-[11px]'>
+              {p.id}
+            </p>
+            <SourceRefLink source={p.source} id={p.id} />
+          </PopoverContent>
+        </Popover>
       </td>
       <td className='max-w-[220px] truncate px-2 py-2 font-mono'>
         {p.model ?? '—'}
@@ -193,5 +250,20 @@ function Row({
         </td>
       )}
     </tr>
+  );
+}
+
+function SourceRefLink({ source, id }: { source: string; id: string }) {
+  const ref = getSourceRef(source, id);
+  if (!ref) return null;
+  return (
+    <a
+      href={ref.url}
+      target='_blank'
+      rel='noopener noreferrer'
+      className='inline-block pt-1 text-[11px] text-blue-600 hover:underline dark:text-blue-400'
+    >
+      {ref.label} ↗
+    </a>
   );
 }
