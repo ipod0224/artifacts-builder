@@ -16,11 +16,27 @@ function parseInchValue(s: string): number | null {
   return null;
 }
 
-/** Sort spec values — numeric, inch-aware, or locale string */
+/**
+ * Extract sortable numeric value from a spec string.
+ * Handles: "2", "∅1.2", "2 (2)", "1.25 (950°C)", etc.
+ */
+function parseSpecNumeric(s: string): number | null {
+  const cleaned = s.replace(/^∅/, '');
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? null : num;
+}
+
+/** Sort spec values — numeric (with suffix tolerance), inch-aware, or locale string */
 export function sortSpecValues(values: string[]): string[] {
-  const allNumeric = values.every((v) => v.trim() !== '' && !isNaN(Number(v)));
-  if (allNumeric) {
-    return [...values].sort((a, b) => Number(a) - Number(b));
+  // Try numeric sort (tolerates ∅ prefix and parenthetical suffixes)
+  const allParseable = values.every((v) => parseSpecNumeric(v) !== null);
+  if (allParseable) {
+    return [...values].sort((a, b) => {
+      const aHasDia = a.startsWith('∅');
+      const bHasDia = b.startsWith('∅');
+      if (aHasDia !== bHasDia) return aHasDia ? -1 : 1;
+      return (parseSpecNumeric(a) ?? 0) - (parseSpecNumeric(b) ?? 0);
+    });
   }
   // Inch-aware sort: if all values parse as inches, sort by numeric size
   const inchValues = values.map((v) => parseInchValue(v));

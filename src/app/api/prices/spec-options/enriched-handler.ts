@@ -10,6 +10,7 @@ interface SpecDimension {
 }
 
 interface ProductRow {
+  id: string;
   source: string;
   brand: string | null;
   model: string | null;
@@ -157,13 +158,17 @@ const TRANSFORMER_CONFIG: EnrichedConfig = {
 //
 // Mapping: 聚氯乙烯→PVC, 交連聚乙烯/XLPE→XLPE, 耐燃/FR→FR
 // Cores: 絞線/單心/單線→1, N心→N, N/C→N
-// Spec: extract Nmm and strip trailing ".0" to match canonical
+// Spec: extract Nmm² and strip trailing ".0" to match canonical
+// IMPORTANT: Use mm[2²] (not bare mm) to avoid confusing diameter (mm) with
+// cross-section area (mm²). Solid wire uses diameter like "2.0mm" which is
+// NOT the same as "2.0mm²". See JC-164 for full analysis.
 
 const CABLE_CTE = `
 WITH cable_enriched AS (
   SELECT *,
     COALESCE(
       NULLIF(specs->>'type', ''),
+      NULLIF(specs->>'wire_type', ''),
       CASE
         WHEN specs->>'name' ~ '交連聚乙烯' OR specs->>'name' ~ 'XLPE' THEN 'XLPE'
         WHEN specs->>'name' ~ '聚氯乙烯絕緣電線' THEN 'PVC'
@@ -183,7 +188,7 @@ WITH cable_enriched AS (
     COALESCE(
       NULLIF(specs->>'spec', ''),
       regexp_replace(
-        (regexp_match(specs->>'name', '(\\d+(?:\\.\\d+)?)mm'))[1],
+        (regexp_match(specs->>'name', '(\\d+(?:\\.\\d+)?)mm[2²]'))[1],
         '\\.0$', ''
       )
     ) AS v_spec
@@ -217,7 +222,7 @@ const CABLE_CONFIG: EnrichedConfig = {
     cores: 'v_cores',
     spec: 'v_spec'
   },
-  dualGroupKeys: new Set(['type', 'cores']),
+  dualGroupKeys: new Set([]),
   modelSql: `
     CASE
       WHEN specs->>'model' IS NOT NULL AND specs->>'model' != ''
@@ -482,10 +487,27 @@ export async function handleEnriched(
         ORDER BY val
       `;
       const rows = await sql.unsafe(query, params);
+      const rawValues = rows.map((r) =>
+        String((r as Record<string, unknown>).val)
+      );
+
+      // Sort numerically: ∅-prefixed first, then by numeric value, then text
+      const values = rawValues.sort((a, b) => {
+        const aHasDia = a.startsWith('∅');
+        const bHasDia = b.startsWith('∅');
+        if (aHasDia !== bHasDia) return aHasDia ? -1 : 1;
+        const aNum = parseFloat(a.replace(/^∅/, ''));
+        const bNum = parseFloat(b.replace(/^∅/, ''));
+        if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+        if (!isNaN(aNum)) return -1;
+        if (!isNaN(bNum)) return 1;
+        return a.localeCompare(b);
+      });
+
       return {
         key: dim.key,
         label: dim.label,
-        values: rows.map((r) => String((r as Record<string, unknown>).val)),
+        values,
         selected: filters[dim.key] ?? null
       };
     })
@@ -516,7 +538,7 @@ export async function handleEnriched(
 
     const query = `
       ${config.cteSql}
-      SELECT source, brand,
+      SELECT id, source, brand,
         ${config.modelSql},
         sell_price::int AS sell_price,
         list_price::int AS list_price,
@@ -526,7 +548,16 @@ export async function handleEnriched(
         json_build_object(
           'model', specs->>'model',
           'spec',  specs->>'spec',
-          'name',  specs->>'name'
+          'name',  COALESCE(
+            specs->>'name',
+            NULLIF(TRIM(CONCAT_WS(' ',
+              NULLIF(specs->>'wire_type', ''),
+              NULLIF(specs->>'brand', ''),
+              NULLIF(specs->>'conductor', ''),
+              CASE WHEN specs->>'spec' IS NOT NULL
+                THEN specs->>'spec' || 'mm²' END
+            )), '')
+          )
         ) AS specs
       FROM ${config.cteAlias}
       WHERE ${whereClause}
