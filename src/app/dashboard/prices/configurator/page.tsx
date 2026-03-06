@@ -1,8 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -22,6 +20,7 @@ import {
   DimensionRow,
   type DimensionOption
 } from './_components/dimension-row';
+import { FilterChip } from './_components/filter-chip';
 import { ProductTable, type ProductRow } from './_components/product-table';
 import { ResultSummary } from './_components/result-summary';
 
@@ -136,20 +135,13 @@ export default function ConfiguratorPage() {
   return (
     <div className='space-y-4 p-4 sm:space-y-6 sm:p-6'>
       {/* Header */}
-      <div className='flex items-center justify-between'>
-        <div>
-          <h2 className='text-xl font-bold tracking-tight sm:text-2xl'>
-            互動配置器
-          </h2>
-          <p className='text-muted-foreground text-xs sm:text-sm'>
-            逐步選取規格，即時比較各通路價格
-          </p>
-        </div>
-        {filterCount > 0 && (
-          <Button variant='outline' size='sm' onClick={handleClearAll}>
-            清除篩選 ({filterCount})
-          </Button>
-        )}
+      <div>
+        <h2 className='text-xl font-bold tracking-tight sm:text-2xl'>
+          互動配置器
+        </h2>
+        <p className='text-muted-foreground text-xs sm:text-sm'>
+          逐步選取規格，即時比較各通路價格
+        </p>
       </div>
 
       {/* Error Banner */}
@@ -168,14 +160,12 @@ export default function ConfiguratorPage() {
         <CardContent>
           <div className='flex flex-wrap gap-2'>
             {CONFIGURABLE_CATEGORIES.map((cat) => (
-              <Button
+              <FilterChip
                 key={cat}
-                variant={category === cat ? 'default' : 'outline'}
-                size='sm'
+                label={CATEGORY_LABELS[cat]}
+                selected={category === cat}
                 onClick={() => handleCategorySelect(cat)}
-              >
-                {CATEGORY_LABELS[cat]}
-              </Button>
+              />
             ))}
           </div>
         </CardContent>
@@ -191,6 +181,33 @@ export default function ConfiguratorPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className='space-y-4'>
+            {/* Active filters summary */}
+            {filterCount > 0 && (
+              <div className='bg-muted/50 flex flex-wrap items-center gap-1.5 rounded-lg px-3 py-2'>
+                <span className='text-muted-foreground mr-1 text-xs'>
+                  已選：
+                </span>
+                {Object.entries(filters).map(([key, value]) => {
+                  const dim = dimensions.find((d) => d.key === key);
+                  return (
+                    <FilterChip
+                      key={key}
+                      label={`${dim?.label ?? key}: ${value}`}
+                      selected
+                      showRemove
+                      onClick={() => handleDimensionSelect(key, value)}
+                    />
+                  );
+                })}
+                <button
+                  type='button'
+                  onClick={handleClearAll}
+                  className='text-muted-foreground hover:text-foreground ml-1 text-xs underline-offset-2 hover:underline'
+                >
+                  清除全部
+                </button>
+              </div>
+            )}
             {loading && dimensions.length === 0 ? (
               <div className='space-y-3'>
                 <Skeleton className='h-8 w-48' />

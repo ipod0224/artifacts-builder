@@ -55,6 +55,12 @@ export interface EnrichedConfig {
 // 茂忠: 「士林無熔絲開關附漏電 1P20A NVB50L 110V」
 // 朝立: has poles only, no sensitivity_ma or frame_af
 // 東元: has all 3 dimensions in structured specs
+//
+// sensitivity_ma fallback (3rd layer):
+//   朝立原始資料確認 NVB/NVP 50AF 系列 「額定靈敏度電流(mA): 30」
+//   茂忠 NVB50L/UL/HS 同為士林 NVB-50 系列，標準感度 30mA
+//   NV-KLF 為漏電繼電器，標準感度 30mA
+//   僅對已知型號推斷，未知型號保持 NULL
 
 const LEAKAGEBREAKER_CTE = `
 WITH lb_enriched AS (
@@ -65,15 +71,26 @@ WITH lb_enriched AS (
     ) AS v_poles,
     COALESCE(
       NULLIF(specs->>'sensitivity_ma', ''),
-      (regexp_match(specs->>'name', '靈敏度電流(\\d+)mA'))[1]
+      (regexp_match(specs->>'name', '靈敏度電流(\\d+)mA'))[1],
+      CASE
+        WHEN specs->>'model' ~ '^NV[BP]-' THEN '30'
+        WHEN specs->>'model' ~ '^NV-K' THEN '30'
+        WHEN specs->>'model' ~ '^NV\\d+-SN$' THEN '30'
+        WHEN specs->>'name' ~ 'NVB\\d+[A-Z]*\\s' THEN '30'
+        ELSE NULL
+      END
     ) AS v_sensitivity_ma,
     COALESCE(
       NULLIF(specs->>'frame_af', ''),
       CASE
         WHEN specs->>'name' ~ 'NVB(\\d+)'
           THEN (regexp_match(specs->>'name', 'NVB(\\d+)'))[1]
-        WHEN specs->>'model' ~ 'NVB(\\d+)'
-          THEN (regexp_match(specs->>'model', 'NVB(\\d+)'))[1]
+        WHEN specs->>'model' ~ 'NV[BP]-(\\d+)'
+          THEN (regexp_match(specs->>'model', 'NV[BP]-(\\d+)'))[1]
+        WHEN specs->>'model' ~ '^NV(\\d+)-'
+          THEN (regexp_match(specs->>'model', '^NV(\\d+)-'))[1]
+        WHEN specs->>'model' ~ '^NV-K'
+          THEN '50'
         ELSE NULL
       END
     ) AS v_frame_af

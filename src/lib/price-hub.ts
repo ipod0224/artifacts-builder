@@ -16,7 +16,7 @@ import Database from 'better-sqlite3';
 import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const HOME = process.env.HOME || '/tmp';
+const HOME = process.env.HOME || process.env.USERPROFILE || '/tmp';
 const DEFAULT_DB_DIR = resolve(HOME, 'price-hub/data');
 
 function resolveDbPath(): string {
@@ -25,7 +25,12 @@ function resolveDbPath(): string {
   const resolved = resolve(raw);
 
   // 限制 DB 路徑在允許範圍內（防止 env var 路徑穿越）
-  if (!resolved.startsWith(DEFAULT_DB_DIR) && !resolved.startsWith('/tmp/')) {
+  const allowedPrefixes = [DEFAULT_DB_DIR, '/tmp/'];
+  const homePriceHub = resolve(HOME, 'price-hub');
+  if (
+    !allowedPrefixes.some((p) => resolved.startsWith(p)) &&
+    !resolved.startsWith(homePriceHub)
+  ) {
     throw new Error('Invalid database path configuration');
   }
 
