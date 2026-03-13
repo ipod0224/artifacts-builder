@@ -142,18 +142,23 @@ interface MaterialRow {
   similarity?: number;
 }
 
+function escapeLike(s: string): string {
+  return s.replace(/[%_\\]/g, '\\$&');
+}
+
 /** Layer 1: 原始 ILIKE */
 async function searchByILIKE(query: string): Promise<MaterialRow[]> {
+  const q = escapeLike(query);
   const rows = await sql`
     SELECT code, name, spec, unit, unit_price, category
     FROM materials
-    WHERE name ILIKE ${'%' + query + '%'}
-       OR spec ILIKE ${'%' + query + '%'}
-       OR code ILIKE ${'%' + query + '%'}
+    WHERE name ILIKE ${'%' + q + '%'}
+       OR spec ILIKE ${'%' + q + '%'}
+       OR code ILIKE ${'%' + q + '%'}
     ORDER BY
-      CASE WHEN name ILIKE ${query} THEN 0
-           WHEN name ILIKE ${query + '%'} THEN 1
-           WHEN name ILIKE ${'%' + query + '%'} THEN 2
+      CASE WHEN name ILIKE ${q} THEN 0
+           WHEN name ILIKE ${q + '%'} THEN 1
+           WHEN name ILIKE ${'%' + q + '%'} THEN 2
            ELSE 3 END,
       name, spec
     LIMIT 20
@@ -191,6 +196,7 @@ async function searchByTokens(tokens: string[]): Promise<MaterialRow[]> {
     WHERE name ILIKE ANY(${patterns})
        OR spec ILIKE ANY(${patterns})
        OR code ILIKE ANY(${patterns})
+    LIMIT 200
   `;
 
   // JS 端做 60% 多 token 門檻過濾
@@ -262,25 +268,44 @@ function mergeAndRank(layers: MaterialRow[][]): MaterialRow[] {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { query, match_count = 5, match_threshold = 0.4, category } = body;
+    const {
+      query,
+      match_count: rawMatchCount = 5,
+      match_threshold: rawThreshold = 0.4,
+      category
+    } = body;
 
-    if (!query || typeof query !== 'string') {
+    if (!query || typeof query !== 'string' || query.trim().length === 0) {
       return NextResponse.json({ error: '缺少查詢參數' }, { status: 400 });
     }
 
+    // 限制 query 長度（防止超長查詢）
+    const trimmedQuery = query.trim().slice(0, 500);
+
+    // clamp match_count 1~50 (integer), match_threshold 0~1
+    const parsedCount = Number(rawMatchCount);
+    const match_count = Math.trunc(
+      Math.max(1, Math.min(Number.isFinite(parsedCount) ? parsedCount : 5, 50))
+    );
+    const parsedThreshold = Number(rawThreshold);
+    const match_threshold = Math.max(
+      0,
+      Math.min(Number.isFinite(parsedThreshold) ? parsedThreshold : 0.4, 1)
+    );
+
     // P0: 同義詞展開
-    const expandedTerms = expandQueryWithSynonyms(query);
+    const expandedTerms = expandQueryWithSynonyms(trimmedQuery);
 
     // P1: 分詞
-    const tokens = tokenizeQuery(query);
+    const tokens = tokenizeQuery(trimmedQuery);
 
     // 產生嵌入（Ollama 不可用時回傳 null，跳過向量層）
-    const embedding = await generateEmbedding(query);
+    const embedding = await generateEmbedding(trimmedQuery);
     const embeddingStr = embedding ? '[' + embedding.join(',') + ']' : '';
 
     // 四層 materials 搜尋並行（無 embedding 時跳過向量層）
     const [layer1, layer2, layer3, layer4] = await Promise.all([
-      searchByILIKE(query),
+      searchByILIKE(trimmedQuery),
       searchBySynonyms(expandedTerms),
       searchByTokens(tokens),
       embeddingStr
@@ -366,7 +391,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: filteredData,
       materials: formattedMaterials,
-      query,
+      query: trimmedQuery,
       embedding_dimension: embedding?.length ?? 0,
       embedding_available: !!embedding,
       search_meta: {

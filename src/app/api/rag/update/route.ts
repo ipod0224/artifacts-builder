@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
+import { requireWriteAuth } from '@/lib/api-auth';
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const MODEL_NAME = 'bge-m3';
@@ -24,6 +25,9 @@ async function generateEmbedding(text: string): Promise<number[]> {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = requireWriteAuth(request);
+  if (authError) return authError;
+
   try {
     const body = await request.json();
     const { id, content, regenerate_embedding = true } = body;

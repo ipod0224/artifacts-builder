@@ -99,16 +99,31 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: 未命中 → LLM fallback
-    // 轉發 auth headers（Basic Auth cookie + authorization）給內部 API 呼叫
+    const apiBase = getApiBase(request);
+
+    // 只對同源或內部 API 轉發 auth headers，外部改用專用 token
+    // 無外部 API 設定 = 同源；或目標是私有 IP = 內部
+    const isInternal =
+      !process.env.RAG_API_BASE ||
+      /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d+\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(
+        apiBase
+      ) ||
+      apiBase === request.nextUrl.origin;
+
     const forwardHeaders: Record<string, string> = {
       'Content-Type': 'application/json'
     };
-    const cookie = request.headers.get('cookie');
-    if (cookie) forwardHeaders['cookie'] = cookie;
-    const authorization = request.headers.get('authorization');
-    if (authorization) forwardHeaders['authorization'] = authorization;
+    if (isInternal) {
+      const cookie = request.headers.get('cookie');
+      if (cookie) forwardHeaders['cookie'] = cookie;
+      const authorization = request.headers.get('authorization');
+      if (authorization) forwardHeaders['authorization'] = authorization;
+    } else if (process.env.RAG_SERVICE_TOKEN) {
+      forwardHeaders['authorization'] =
+        `Bearer ${process.env.RAG_SERVICE_TOKEN}`;
+    }
 
-    const searchRes = await fetch(`${getApiBase(request)}/api/rag/search`, {
+    const searchRes = await fetch(`${apiBase}/api/rag/search`, {
       method: 'POST',
       headers: forwardHeaders,
       body: JSON.stringify({
@@ -126,14 +141,11 @@ export async function POST(request: NextRequest) {
     const materials = searchData.materials || [];
     const chunks = searchData.data || [];
 
-    const synthesizeRes = await fetch(
-      `${getApiBase(request)}/api/rag/synthesize`,
-      {
-        method: 'POST',
-        headers: forwardHeaders,
-        body: JSON.stringify({ query: trimmedQuery, materials, chunks })
-      }
-    );
+    const synthesizeRes = await fetch(`${apiBase}/api/rag/synthesize`, {
+      method: 'POST',
+      headers: forwardHeaders,
+      body: JSON.stringify({ query: trimmedQuery, materials, chunks })
+    });
 
     if (!synthesizeRes.ok) {
       throw new Error(`synthesize API failed: HTTP ${synthesizeRes.status}`);

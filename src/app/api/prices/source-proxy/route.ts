@@ -1,8 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import iconv from 'iconv-lite';
 import https from 'node:https';
+import { readFileSync } from 'node:fs';
 import { sql } from '@/lib/db';
 import Database from 'better-sqlite3';
+
+// 代理 HTML 安全 headers（唯讀展示，禁止腳本/表單/導航）
+const PROXY_HTML_HEADERS = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'Content-Security-Policy':
+    "default-src 'none'; script-src 'none'; style-src 'unsafe-inline' https: http:; img-src * data:; font-src https: http:; form-action 'none'; base-uri 'none'; frame-ancestors 'none'; sandbox",
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'Cache-Control': 'private, max-age=300'
+};
 
 const WIRE_BASE = 'http://www.wire.com.tw';
 const LOGIN_URL = `${WIRE_BASE}/index0_a.asp`;
@@ -256,7 +267,7 @@ interface PcicItem {
   award_percentage: string;
 }
 
-/** Call PCIC queryBasic API with per-request TLS bypass (incomplete cert chain) */
+/** Call PCIC queryBasic API (public govt API, valid CA cert) */
 function fetchPcicApi(keyword: string): Promise<PcicItem[]> {
   const now = new Date();
   const twoYearsAgo = new Date(now);
@@ -285,26 +296,22 @@ function fetchPcicApi(keyword: string): Promise<PcicItem[]> {
   const url = `${PCIC_API_BASE}?${params}`;
 
   return new Promise((resolve, reject) => {
-    const req = https.get(
-      url,
-      { rejectUnauthorized: false, timeout: 15000 },
-      (res) => {
-        let data = '';
-        res.on('data', (chunk: Buffer) => (data += chunk.toString()));
-        res.on('end', () => {
-          try {
-            const json = JSON.parse(data);
-            if (json.status !== '0') {
-              reject(new Error(`PCIC API status: ${json.status}`));
-              return;
-            }
-            resolve((json.response ?? []) as PcicItem[]);
-          } catch {
-            reject(new Error('Invalid JSON from PCIC API'));
+    const req = https.get(url, { timeout: 15000 }, (res) => {
+      let data = '';
+      res.on('data', (chunk: Buffer) => (data += chunk.toString()));
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          if (json.status !== '0') {
+            reject(new Error(`PCIC API status: ${json.status}`));
+            return;
           }
-        });
-      }
-    );
+          resolve((json.response ?? []) as PcicItem[]);
+        } catch {
+          reject(new Error('Invalid JSON from PCIC API'));
+        }
+      });
+    });
     req.on('error', reject);
     req.on('timeout', () => {
       req.destroy();
@@ -388,9 +395,113 @@ function renderPcicLiveHtml(
 </html>`;
 }
 
-// ── TCRI category URL lookup ──
+// ── TCRI session management + page proxy ──
 
 const TCRI_DB_PATH = `${process.env.HOME}/tcri-mcp/data/tcri.db`;
+const TCRI_AUTH_PATH = `${process.env.HOME}/tcri-mcp/data/auth-state.json`;
+const TCRI_BASE = 'https://ccd.tcri.org.tw';
+
+interface TcriCookie {
+  name: string;
+  value: string;
+  domain: string;
+}
+
+let tcriAuthCache: { cookies: TcriCookie[]; loadedAt: number } | null = null;
+
+/** Load TCRI cookies from auth-state.json (cached 5 min) */
+function loadTcriCookies(): TcriCookie[] | null {
+  if (tcriAuthCache && Date.now() - tcriAuthCache.loadedAt < 5 * 60 * 1000) {
+    return tcriAuthCache.cookies;
+  }
+  try {
+    const raw = readFileSync(TCRI_AUTH_PATH, 'utf-8');
+    const state = JSON.parse(raw);
+    const cookies = (state.cookies ?? []) as TcriCookie[];
+    tcriAuthCache = { cookies, loadedAt: Date.now() };
+    return cookies;
+  } catch {
+    return null;
+  }
+}
+
+/** Build Cookie header for TCRI requests */
+function buildTcriCookieHeader(cookies: TcriCookie[]): string {
+  return cookies
+    .filter((c) => c.domain.replace(/^\./, '') === 'ccd.tcri.org.tw')
+    .filter((c) => c.name && typeof c.value === 'string')
+    .map((c) => `${c.name}=${c.value}`)
+    .join('; ');
+}
+
+/** Fetch a TCRI page with session cookies, return HTML or expired flag */
+async function fetchTcriPage(
+  pageUrl: string
+): Promise<{ ok: boolean; html?: string; expired?: boolean }> {
+  const cookies = loadTcriCookies();
+  if (!cookies || cookies.length === 0) {
+    return { ok: false, expired: true };
+  }
+  const cookieHeader = buildTcriCookieHeader(cookies);
+  if (!cookieHeader) {
+    return { ok: false, expired: true };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch(pageUrl, {
+      headers: {
+        Cookie: cookieHeader,
+        'User-Agent': 'Mozilla/5.0 (source-proxy/1.0)'
+      },
+      redirect: 'manual',
+      signal: controller.signal
+    });
+
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get('location') || '';
+      if (location.includes('/login')) {
+        tcriAuthCache = null;
+        return { ok: false, expired: true };
+      }
+    }
+    if (res.status !== 200) {
+      return { ok: false };
+    }
+
+    let html = await res.text();
+
+    // Rewrite relative URLs to absolute for correct rendering
+    html = html.replace(
+      /(src|href|action)=["'](?!http|\/\/|#|javascript|data:)(.*?)["']/gi,
+      (_, attr: string, path: string) => {
+        const resolved = path.startsWith('/')
+          ? `${TCRI_BASE}${path}`
+          : `${TCRI_BASE}/${path}`;
+        return `${attr}="${resolved}"`;
+      }
+    );
+
+    return { ok: true, html };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/** Render friendly error page when TCRI session is expired */
+function renderTcriExpiredHtml(): string {
+  return `<!DOCTYPE html>
+<html lang="zh-TW"><head><meta charset="utf-8"><title>TCRI 連線逾時</title>
+<style>body{font-family:"Noto Sans TC",sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f8fafc}
+.card{text-align:center;max-width:420px;padding:32px;background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+h1{font-size:18px;color:#1e293b;margin:0 0 12px}p{font-size:14px;color:#64748b;margin:0 0 8px}
+code{background:#f1f5f9;padding:4px 8px;border-radius:4px;font-size:12px}</style></head>
+<body><div class="card"><h1>TCRI 營建物價 — 連線逾時</h1>
+<p>Session 已過期，需重新登入。</p>
+<p>請在伺服器執行：</p>
+<code>cd ~/tcri-mcp && pnpm login</code></div></body></html>`;
+}
 
 /** Look up TCRI category page URL from tcri.db by pcces_code */
 function getTcriCategoryUrl(
@@ -421,7 +532,7 @@ function getTcriCategoryUrl(
  *
  * For 銘宣: auto-login + proxy the price page (Big5→UTF-8)
  * For PCIC: live API query → render full results table
- * For TCRI: redirect to category page on TCRI website
+ * For TCRI: server-side proxy with cookie auth (reads auth-state.json)
  * For 茂忠: redirect to m5.com.tw product page
  * For GDrive sources: redirect to Google Sheets
  * For others: redirect to static URL
@@ -452,12 +563,7 @@ export async function GET(request: NextRequest) {
       const cookie = await getWinsenCookie();
       const html = await fetchWinsenPage(path, cookie);
 
-      return new NextResponse(html, {
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'private, max-age=300'
-        }
-      });
+      return new NextResponse(html, { headers: PROXY_HTML_HEADERS });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
       return NextResponse.json(
@@ -498,19 +604,14 @@ export async function GET(request: NextRequest) {
       const items = await fetchPcicApi(code);
       const html = renderPcicLiveHtml(items, code, keyword || code);
 
-      return new NextResponse(html, {
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-          'Cache-Control': 'private, max-age=300'
-        }
-      });
+      return new NextResponse(html, { headers: PROXY_HTML_HEADERS });
     } catch (err) {
       console.error('PCIC proxy error:', err);
       return NextResponse.json({ error: 'PCIC query failed' }, { status: 502 });
     }
   }
 
-  // ── TCRI: redirect to category page on TCRI website ──
+  // ── TCRI: server-side proxy with cookie auth (like 銘宣) ──
   if (source === 'TCRI') {
     if (!id || id.length > 200) {
       return NextResponse.json({ error: 'Invalid record ID' }, { status: 400 });
@@ -528,19 +629,42 @@ export async function GET(request: NextRequest) {
       const specs = rows[0].specs as Record<string, unknown>;
       const pccesCode = String(specs.pcces_code ?? '');
       const period = String(specs.period ?? '');
-      const periodNum = period.replace(/\D/g, '');
+      const periodNum = period.replace(/\D/g, '').slice(0, 20);
 
-      // Look up category URL from tcri.db
       const cat = pccesCode ? getTcriCategoryUrl(pccesCode) : null;
-      if (cat) {
-        const url = periodNum
-          ? `${cat.url}?announce=R${periodNum}&search_per_page=50`
-          : cat.url;
-        return NextResponse.redirect(url);
+      if (!cat) {
+        return NextResponse.json(
+          { error: 'Category not found for this record' },
+          { status: 404 }
+        );
+      }
+      if (!cat.url.startsWith(`${TCRI_BASE}/`)) {
+        return NextResponse.json(
+          { error: 'Invalid category URL in database' },
+          { status: 500 }
+        );
       }
 
-      // Fallback: redirect to TCRI homepage
-      return NextResponse.redirect('https://ccd.tcri.org.tw/material-item');
+      const pageUrl = periodNum
+        ? `${cat.url}?announce=R${periodNum}&search_per_page=50`
+        : cat.url;
+
+      const result = await fetchTcriPage(pageUrl);
+
+      if (result.expired) {
+        return new NextResponse(renderTcriExpiredHtml(), {
+          headers: PROXY_HTML_HEADERS,
+          status: 503
+        });
+      }
+      if (!result.ok || !result.html) {
+        return NextResponse.json(
+          { error: 'TCRI fetch failed' },
+          { status: 502 }
+        );
+      }
+
+      return new NextResponse(result.html, { headers: PROXY_HTML_HEADERS });
     } catch (err) {
       console.error('TCRI proxy error:', err);
       return NextResponse.json({ error: 'TCRI query failed' }, { status: 502 });

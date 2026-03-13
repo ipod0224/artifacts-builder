@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { spawn } from 'child_process';
+import { requireWriteAuth } from '@/lib/api-auth';
 
-const CLAUDE_PATH = '/Users/yen/.local/bin/claude';
+const CLAUDE_PATH = (() => {
+  const p = process.env.CLAUDE_PATH || '/Users/yen/.local/bin/claude';
+  if (!p.startsWith('/') || p.includes('..'))
+    throw new Error('Invalid CLAUDE_PATH');
+  return p;
+})();
 
 interface SynthesizeInput {
   query: string;
@@ -167,6 +173,9 @@ function synthesizeStructured(input: SynthesizeInput): string {
 }
 
 export async function POST(request: NextRequest) {
+  const authError = requireWriteAuth(request);
+  if (authError) return authError;
+
   try {
     const body: SynthesizeInput = await request.json();
 
