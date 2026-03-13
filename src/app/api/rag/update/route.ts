@@ -85,8 +85,7 @@ export async function POST(request: NextRequest) {
       embedding_regenerated: regenerate_embedding
     });
   } catch (err) {
-    console.error('API 錯誤:', err);
-    const message = err instanceof Error ? err.message : '未知錯誤';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[RAG update]', err);
+    return NextResponse.json({ error: '更新失敗' }, { status: 500 });
   }
 }

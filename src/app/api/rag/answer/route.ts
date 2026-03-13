@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (err) {
-    const message = err instanceof Error ? err.message : '對答系統錯誤';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[RAG answer]', err);
+    return NextResponse.json({ error: '對答系統錯誤' }, { status: 500 });
   }
 }

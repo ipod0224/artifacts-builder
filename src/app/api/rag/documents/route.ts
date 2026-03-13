@@ -31,8 +31,7 @@ export async function GET(request: NextRequest) {
       data: rows
     });
   } catch (err) {
-    console.error('Documents API 錯誤:', err);
-    const message = err instanceof Error ? err.message : '未知錯誤';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[RAG documents]', err);
+    return NextResponse.json({ error: '文件查詢失敗' }, { status: 500 });
   }
 }

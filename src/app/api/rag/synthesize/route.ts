@@ -226,7 +226,7 @@ export async function POST(request: NextRequest) {
       provider
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : '合成失敗';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[RAG synthesize]', err);
+    return NextResponse.json({ error: '合成失敗' }, { status: 500 });
   }
 }

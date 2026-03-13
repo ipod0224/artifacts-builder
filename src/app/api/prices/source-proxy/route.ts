@@ -566,11 +566,8 @@ export async function GET(request: NextRequest) {
 
       return new NextResponse(html, { headers: PROXY_HTML_HEADERS });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      return NextResponse.json(
-        { error: `銘宣 proxy failed: ${msg}` },
-        { status: 502 }
-      );
+      console.error('[source-proxy] 銘宣 proxy failed:', err);
+      return NextResponse.json({ error: '銘宣代理查詢失敗' }, { status: 502 });
     }
   }
 

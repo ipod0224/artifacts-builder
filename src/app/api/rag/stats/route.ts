@@ -21,7 +21,7 @@ export async function GET() {
       materials: matResult
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : '未知錯誤';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[RAG stats]', err);
+    return NextResponse.json({ error: '統計查詢失敗' }, { status: 500 });
   }
 }

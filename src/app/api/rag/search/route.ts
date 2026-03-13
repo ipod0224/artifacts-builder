@@ -406,7 +406,7 @@ export async function POST(request: NextRequest) {
       }
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : '未知錯誤';
-    return NextResponse.json({ error: message }, { status: 500 });
+    console.error('[RAG search]', err);
+    return NextResponse.json({ error: '搜尋失敗' }, { status: 500 });
   }
 }
