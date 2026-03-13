@@ -173,7 +173,7 @@ async function searchBySynonyms(
   if (expandedTerms.length === 0) return [];
 
   // 建構 ILIKE 條件（name OR spec 匹配任一同義詞）
-  const patterns = expandedTerms.map((t) => `%${t}%`);
+  const patterns = expandedTerms.map((t) => `%${escapeLike(t)}%`);
   const rows = await sql`
     SELECT DISTINCT ON (code) code, name, spec, unit, unit_price, category
     FROM materials
@@ -189,7 +189,7 @@ async function searchByTokens(tokens: string[]): Promise<MaterialRow[]> {
   if (tokens.length < 2) return [];
 
   // SQL 端預過濾：至少匹配一個 token 的材料
-  const patterns = tokens.map((t) => `%${t.toLowerCase()}%`);
+  const patterns = tokens.map((t) => `%${escapeLike(t.toLowerCase())}%`);
   const candidates = await sql`
     SELECT code, name, spec, unit, unit_price, category
     FROM materials
