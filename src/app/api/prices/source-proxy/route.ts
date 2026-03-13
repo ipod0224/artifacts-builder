@@ -185,7 +185,8 @@ async function winsenLogin(): Promise<string> {
       'User-Agent': 'Mozilla/5.0 (source-proxy/1.0)'
     },
     body,
-    redirect: 'manual'
+    redirect: 'manual',
+    signal: AbortSignal.timeout(15_000)
   });
 
   const setCookieHeaders =

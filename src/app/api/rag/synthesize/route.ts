@@ -59,11 +59,21 @@ function buildUserPrompt(input: SynthesizeInput): string {
   return parts.join('\n');
 }
 
+// 限制同時只能有 2 個 claude CLI 進程（防止 process explosion）
+let activeSpawns = 0;
+const MAX_CONCURRENT_SPAWNS = 2;
+
 /**
  * 用 claude -p 走訂閱制 Opus 合成回答
  * 不需要 API key，直接用 Claude Code 訂閱認證
  */
 function synthesizeWithClaudeCLI(input: SynthesizeInput): Promise<string> {
+  if (activeSpawns >= MAX_CONCURRENT_SPAWNS) {
+    return Promise.reject(
+      new Error('CLAUDE_CLI_BUSY: too many concurrent requests')
+    );
+  }
+  activeSpawns++;
   return new Promise((resolve, reject) => {
     const fullPrompt = `${SYSTEM_PROMPT}\n\n${buildUserPrompt(input)}`;
 
@@ -74,12 +84,21 @@ function synthesizeWithClaudeCLI(input: SynthesizeInput): Promise<string> {
 
     const proc = spawn(CLAUDE_PATH, ['-p', '--model', 'opus'], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      timeout: 120_000,
       env: cleanEnv
     });
 
     let stdout = '';
     let stderr = '';
+    let killed = false;
+
+    // spawn 不支援 timeout option，手動實作
+    const timer = setTimeout(() => {
+      killed = true;
+      proc.kill('SIGTERM');
+      setTimeout(() => {
+        if (!proc.killed) proc.kill('SIGKILL');
+      }, 5_000);
+    }, 120_000);
 
     proc.stdout.on('data', (data: Buffer) => {
       stdout += data.toString();
@@ -90,7 +109,11 @@ function synthesizeWithClaudeCLI(input: SynthesizeInput): Promise<string> {
     });
 
     proc.on('close', (code) => {
-      if (code === 0 && stdout.trim()) {
+      activeSpawns--;
+      clearTimeout(timer);
+      if (killed) {
+        reject(new Error('CLAUDE_CLI_TIMEOUT: exceeded 120s'));
+      } else if (code === 0 && stdout.trim()) {
         resolve(stdout.trim());
       } else {
         reject(
@@ -100,6 +123,8 @@ function synthesizeWithClaudeCLI(input: SynthesizeInput): Promise<string> {
     });
 
     proc.on('error', (err) => {
+      activeSpawns--;
+      clearTimeout(timer);
       reject(new Error(`CLAUDE_CLI_ERROR: ${err.message}`));
     });
 
