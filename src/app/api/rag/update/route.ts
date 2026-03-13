@@ -13,7 +13,8 @@ async function generateEmbedding(text: string): Promise<number[]> {
       model: MODEL_NAME,
       input: [text],
       keep_alive: '5m'
-    })
+    }),
+    signal: AbortSignal.timeout(30_000)
   });
 
   if (!response.ok) {
@@ -61,9 +62,10 @@ export async function POST(request: NextRequest) {
       `;
       data = rows[0];
     } else {
+      // 內容變更但不重新生成 embedding → 清空 embedding 避免向量搜尋返回過時結果
       const rows = await sql`
         UPDATE documents
-        SET content = ${content}
+        SET content = ${content}, embedding = NULL
         WHERE id = ${id}
         RETURNING id, content, metadata
       `;

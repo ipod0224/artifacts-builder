@@ -70,6 +70,9 @@ export function useSearchRag() {
 
       const result = await response.json();
 
+      // Stale response guard: ignore if a newer request has been issued
+      if (controller !== abortRef.current) return;
+
       if (!response.ok) {
         throw new Error(result.error || '搜尋失敗');
       }
