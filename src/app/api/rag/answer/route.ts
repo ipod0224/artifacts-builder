@@ -130,7 +130,8 @@ export async function POST(request: NextRequest) {
         query: trimmedQuery,
         match_count: 5,
         match_threshold: 0.4
-      })
+      }),
+      signal: AbortSignal.timeout(30_000)
     });
 
     if (!searchRes.ok) {
@@ -144,7 +145,8 @@ export async function POST(request: NextRequest) {
     const synthesizeRes = await fetch(`${apiBase}/api/rag/synthesize`, {
       method: 'POST',
       headers: forwardHeaders,
-      body: JSON.stringify({ query: trimmedQuery, materials, chunks })
+      body: JSON.stringify({ query: trimmedQuery, materials, chunks }),
+      signal: AbortSignal.timeout(150_000) // claude CLI can take up to 120s
     });
 
     if (!synthesizeRes.ok) {
