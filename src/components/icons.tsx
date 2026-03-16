@@ -1,4 +1,5 @@
 import {
+  IconAdjustmentsHorizontal,
   IconAlertTriangle,
   IconArrowRight,
   IconBolt,
@@ -91,5 +92,6 @@ export const Icons = {
   priceIntel: IconChartLine,
   commodity: IconChartHistogram,
   quote: IconBlockquote,
-  tcc: IconBolt
+  tcc: IconBolt,
+  configurator: IconAdjustmentsHorizontal
 };

@@ -53,14 +53,17 @@ export const navItems: NavItem[] = [
     title: '價格情報',
     url: '/dashboard/prices',
     icon: 'priceIntel',
-    isActive: true,
+    isActive: false,
     shortcut: ['p', 'r'],
-    items: [
-      {
-        title: '互動配置器',
-        url: '/dashboard/prices/configurator'
-      }
-    ]
+    items: []
+  },
+  {
+    title: '互動配置器',
+    url: '/dashboard/prices/configurator',
+    icon: 'configurator',
+    isActive: false,
+    shortcut: ['c', 'f'],
+    items: []
   },
   {
     title: 'TCC 曲線',
@@ -77,91 +80,13 @@ export const navItems: NavItem[] = [
     isActive: false,
     shortcut: ['c', 'm'],
     items: []
-  },
-  {
-    title: '語錄',
-    url: '/dashboard/quotes',
-    icon: 'quote',
-    isActive: false,
-    shortcut: ['q', 't'],
-    items: []
-  },
-  {
-    title: 'Workspaces',
-    url: '/dashboard/workspaces',
-    icon: 'workspace',
-    isActive: false,
-    items: []
-  },
-  {
-    title: 'Teams',
-    url: '/dashboard/workspaces/team',
-    icon: 'teams',
-    isActive: false,
-    items: [],
-    // Require organization to be active
-    access: { requireOrg: true }
-    // Alternative: require specific permission
-    // access: { requireOrg: true, permission: 'org:teams:view' }
-  },
-  {
-    title: 'Product',
-    url: '/dashboard/product',
-    icon: 'product',
-    shortcut: ['p', 'p'],
-    isActive: false,
-    items: []
-  },
-  {
-    title: 'Kanban',
-    url: '/dashboard/kanban',
-    icon: 'kanban',
-    shortcut: ['k', 'k'],
-    isActive: false,
-    items: []
-  },
-  {
-    title: 'Pro',
-    url: '#', // Placeholder as there is no direct link for the parent
-    icon: 'pro',
-    isActive: true,
-    items: [
-      {
-        title: 'Exclusive',
-        url: '/dashboard/exclusive',
-        icon: 'exclusive',
-        shortcut: ['m', 'm']
-      }
-    ]
-  },
-  {
-    title: 'Account',
-    url: '#', // Placeholder as there is no direct link for the parent
-    icon: 'account',
-    isActive: true,
-    items: [
-      {
-        title: 'Profile',
-        url: '/dashboard/profile',
-        icon: 'profile',
-        shortcut: ['m', 'm']
-      },
-      {
-        title: 'Billing',
-        url: '/dashboard/billing',
-        icon: 'billing',
-        shortcut: ['b', 'b'],
-        // Only show billing if in organization context
-        access: { requireOrg: true }
-        // Alternative: require billing management permission
-        // access: { requireOrg: true, permission: 'org:manage:billing' }
-      },
-      {
-        title: 'Login',
-        shortcut: ['l', 'l'],
-        url: '/',
-        icon: 'login'
-      }
-    ]
   }
+  // --- 以下暫時隱藏，有新功能時再啟用 ---
+  // { title: '語錄', url: '/dashboard/quotes', icon: 'quote', isActive: false, shortcut: ['q', 't'], items: [] },
+  // { title: 'Workspaces', url: '/dashboard/workspaces', icon: 'workspace', isActive: false, items: [] },
+  // { title: 'Teams', url: '/dashboard/workspaces/team', icon: 'teams', isActive: false, items: [], access: { requireOrg: true } },
+  // { title: 'Product', url: '/dashboard/product', icon: 'product', shortcut: ['p', 'p'], isActive: false, items: [] },
+  // { title: 'Kanban', url: '/dashboard/kanban', icon: 'kanban', shortcut: ['k', 'k'], isActive: false, items: [] },
+  // { title: 'Pro', url: '#', icon: 'pro', isActive: true, items: [{ title: 'Exclusive', url: '/dashboard/exclusive', icon: 'exclusive', shortcut: ['m', 'm'] }] },
+  // { title: 'Account', url: '#', icon: 'account', isActive: true, items: [{ title: 'Profile', url: '/dashboard/profile', icon: 'profile', shortcut: ['m', 'm'] }, { title: 'Billing', url: '/dashboard/billing', icon: 'billing', shortcut: ['b', 'b'], access: { requireOrg: true } }, { title: 'Login', shortcut: ['l', 'l'], url: '/', icon: 'login' }] }
 ];
